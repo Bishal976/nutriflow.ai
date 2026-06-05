@@ -10,6 +10,8 @@ export default function SignupPage() {
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirm, setShowConfirm] = useState(false)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -46,11 +48,21 @@ export default function SignupPage() {
           </div>
           <div>
             <label className="label">Password</label>
-            <input className="input-field" type="password" placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required />
+            <div style={{ position: 'relative' }}>
+              <input className="input-field" type={showPassword ? 'text' : 'password'} placeholder="Min. 8 characters" value={password} onChange={e => setPassword(e.target.value)} required style={{ paddingRight: 44 }} />
+              <button type="button" onClick={() => setShowPassword(v => !v)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0 14px', display: 'flex', alignItems: 'center', fontSize: 18 }}>
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
           <div>
             <label className="label">Confirm password</label>
-            <input className="input-field" type="password" placeholder="Repeat password" value={confirm} onChange={e => setConfirm(e.target.value)} required />
+            <div style={{ position: 'relative' }}>
+              <input className="input-field" type={showConfirm ? 'text' : 'password'} placeholder="Repeat password" value={confirm} onChange={e => setConfirm(e.target.value)} required style={{ paddingRight: 44 }} />
+              <button type="button" onClick={() => setShowConfirm(v => !v)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0 14px', display: 'flex', alignItems: 'center', fontSize: 18 }}>
+                {showConfirm ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
           {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--error)' }}>{error}</div>}
           <button className="btn-primary" type="submit" disabled={loading} style={{ width: '100%', padding: '12px' }}>

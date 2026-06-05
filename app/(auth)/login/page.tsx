@@ -1,14 +1,22 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showPassword, setShowPassword] = useState(false)
+
+  useEffect(() => {
+    if (searchParams.get('reason') === 'session_expired')
+      setInfo('Your session expired. Please sign in again.')
+  }, [searchParams])
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -42,8 +50,14 @@ export default function LoginPage() {
           </div>
           <div>
             <label className="label">Password</label>
-            <input className="input-field" type="password" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required />
+            <div style={{ position: 'relative' }}>
+              <input className="input-field" type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required style={{ paddingRight: 44 }} />
+              <button type="button" onClick={() => setShowPassword(v => !v)} style={{ position: 'absolute', right: 0, top: 0, bottom: 0, background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0 14px', display: 'flex', alignItems: 'center', fontSize: 18 }}>
+                {showPassword ? '🙈' : '👁️'}
+              </button>
+            </div>
           </div>
+          {info && <div style={{ background: 'rgba(45,125,125,0.08)', border: '1px solid rgba(45,125,125,0.25)', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--primary)' }}>{info}</div>}
           {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--error)' }}>{error}</div>}
           <button className="btn-primary" type="submit" disabled={loading} style={{ width: '100%', padding: '12px' }}>
             {loading ? <span className="spinner" style={{ width: 18, height: 18, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white', borderRadius: '50%', display: 'inline-block' }} /> : 'Sign in'}
@@ -54,5 +68,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   )
 }

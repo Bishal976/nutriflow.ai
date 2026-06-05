@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { buildPlanSystemPrompt, buildPlanUserPrompt } from './prompts/plan'
 import { validateRebalancedPlan } from '@/lib/nutrition/safety-validator'
+import { getMockPlan } from './mock-responses'
 import type { MealPlanItem } from '@/types/api'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
@@ -9,7 +10,7 @@ interface PlanInput {
   calories: number; proteinG: number; carbsG: number; fatG: number
   dietType: string; allergens: string[]; cuisinePrefs: string[]
   dislikedIngredients: string[]; conditions: string[]
-  waterMl: number; weatherNote?: string
+  waterMl: number; weatherNote?: string; userHint?: string
 }
 
 export interface GeneratedPlan {
@@ -39,10 +40,12 @@ function conditionToRestrictions(conditions: string[]): string[] {
 }
 
 export async function generateDayPlan(input: PlanInput): Promise<GeneratedPlan> {
+  if (process.env.MOCK_AI === 'true') return getMockPlan(input)
+
   const conditionRestrictions = conditionToRestrictions(input.conditions)
 
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-flash-latest',
     systemInstruction: buildPlanSystemPrompt(),
   })
 

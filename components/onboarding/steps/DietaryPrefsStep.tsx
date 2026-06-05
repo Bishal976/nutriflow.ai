@@ -62,11 +62,11 @@ export default function DietaryPrefsStep({ onSubmit, loading }: Props) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {ALLERGENS.map(a => (
             <button key={a} type="button" onClick={() => toggleAllergen(a)} style={{
-              padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${allergens.includes(a) ? 'var(--error)' : 'var(--border)'}`,
-              background: allergens.includes(a) ? '#FEF2F2' : 'var(--surface)',
-              color: allergens.includes(a) ? 'var(--error)' : 'var(--text-muted)',
+              padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${allergens.includes(a) ? 'var(--accent)' : 'var(--border)'}`,
+              background: allergens.includes(a) ? 'rgba(232,148,58,0.1)' : 'var(--surface)',
+              color: allergens.includes(a) ? '#8B4F00' : 'var(--text-muted)',
               fontWeight: allergens.includes(a) ? 600 : 400, cursor: 'pointer', fontSize: 14, transition: 'all 0.12s',
-            }}>{a}</button>
+            }}>{allergens.includes(a) ? '⚠ ' : ''}{a}</button>
           ))}
         </div>
       </div>

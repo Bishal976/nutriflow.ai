@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
         status: 'COMPLETED',
         result: result as any,
         processingTimeMs: Date.now() - start,
-        modelUsed: 'gemini-1.5-flash',
+        modelUsed: 'gemini-flash-latest',
         completedAt: new Date(),
       }).where(eq(visionJobs.id, job.id))
     } catch (aiErr) {

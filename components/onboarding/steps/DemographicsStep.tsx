@@ -14,7 +14,7 @@ export default function DemographicsStep({ onSubmit, loading }: Props) {
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="grid-2">
         <div>
           <label className="label">First name</label>
           <input className="input-field" placeholder="Aarav" value={form.firstName} onChange={e => set('firstName', e.target.value)} required />
@@ -25,7 +25,7 @@ export default function DemographicsStep({ onSubmit, loading }: Props) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="grid-2">
         <div>
           <label className="label">Date of birth</label>
           <input className="input-field" type="date" value={form.dateOfBirth} onChange={e => set('dateOfBirth', e.target.value)} required />
@@ -41,7 +41,7 @@ export default function DemographicsStep({ onSubmit, loading }: Props) {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="grid-2">
         <div>
           <label className="label">Height (cm)</label>
           <input className="input-field" type="number" placeholder="170" min={100} max={250} value={form.heightCm} onChange={e => set('heightCm', e.target.value)} required />

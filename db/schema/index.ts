@@ -112,6 +112,8 @@ export const dailyLogs = pgTable('daily_logs', {
   actualFiberG: real('actual_fiber_g').default(0),
   waterMl: integer('water_ml').default(0),
   adherenceScore: real('adherence_score'),
+  planData: jsonb('plan_data'),
+  weatherContext: jsonb('weather_context'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),

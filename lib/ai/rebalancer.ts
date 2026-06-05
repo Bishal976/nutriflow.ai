@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { buildRebalanceSystemPrompt, buildRebalanceUserPrompt } from './prompts/rebalance'
 import { validateRebalancedPlan, sanitizeExplanation } from '@/lib/nutrition/safety-validator'
+import { getMockRebalance } from './mock-responses'
 import type { MedicalConditionCode } from '@/lib/nutrition/engine'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
@@ -27,8 +28,10 @@ export interface RebalanceResult {
 }
 
 export async function generateRebalancedPlan(input: RebalanceInput): Promise<RebalanceResult> {
+  if (process.env.MOCK_AI === 'true') return getMockRebalance()
+
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-flash-latest',
     systemInstruction: buildRebalanceSystemPrompt(),
   })
 

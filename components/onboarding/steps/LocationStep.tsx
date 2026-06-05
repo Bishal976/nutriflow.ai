@@ -5,6 +5,19 @@ interface Props { onSubmit: (data: object) => void; loading: boolean }
 
 const CITIES = ['Mumbai', 'Delhi', 'Bengaluru', 'Chennai', 'Hyderabad', 'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Chandigarh', 'Other']
 
+const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
+  'Mumbai':     { lat: 19.076,  lon: 72.877 },
+  'Delhi':      { lat: 28.679,  lon: 77.069 },
+  'Bengaluru':  { lat: 12.972,  lon: 77.594 },
+  'Chennai':    { lat: 13.085,  lon: 80.270 },
+  'Hyderabad':  { lat: 17.387,  lon: 78.480 },
+  'Kolkata':    { lat: 22.573,  lon: 88.364 },
+  'Pune':       { lat: 18.520,  lon: 73.856 },
+  'Ahmedabad':  { lat: 23.023,  lon: 72.572 },
+  'Jaipur':     { lat: 26.912,  lon: 75.787 },
+  'Chandigarh': { lat: 30.740,  lon: 76.788 },
+}
+
 export default function LocationStep({ onSubmit, loading }: Props) {
   const [city, setCity] = useState('')
   const [customCity, setCustomCity] = useState('')
@@ -14,7 +27,8 @@ export default function LocationStep({ onSubmit, loading }: Props) {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     const finalCity = city === 'Other' ? customCity : city
-    onSubmit({ city: finalCity, country, timezone })
+    const coords = CITY_COORDS[finalCity] ?? {}
+    onSubmit({ city: finalCity, country, timezone, lat: coords.lat ?? null, lon: coords.lon ?? null })
   }
 
   return (
@@ -25,7 +39,7 @@ export default function LocationStep({ onSubmit, loading }: Props) {
 
       <div>
         <label className="label">City</label>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 10 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 8, marginBottom: 10 }}>
           {CITIES.map(c => (
             <button key={c} type="button" onClick={() => setCity(c)} style={{
               padding: '10px 8px', borderRadius: 8, border: `1.5px solid ${city === c ? 'var(--primary)' : 'var(--border)'}`,
@@ -40,7 +54,7 @@ export default function LocationStep({ onSubmit, loading }: Props) {
         )}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="grid-2">
         <div>
           <label className="label">Country</label>
           <input className="input-field" value={country} onChange={e => setCountry(e.target.value)} required />

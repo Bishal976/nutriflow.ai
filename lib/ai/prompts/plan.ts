@@ -13,7 +13,7 @@ export function buildPlanUserPrompt(params: {
   calories: number; proteinG: number; carbsG: number; fatG: number
   dietType: string; allergens: string[]; cuisinePrefs: string[]
   dislikedIngredients: string[]; conditionRestrictions: string[]
-  waterMl: number; weatherNote?: string
+  waterMl: number; weatherNote?: string; userHint?: string
 }): string {
   return `Generate a full day meal plan.
 
@@ -31,6 +31,7 @@ CONSTRAINTS:
 - Avoid ingredients: ${params.dislikedIngredients.length ? params.dislikedIngredients.join(', ') : 'none'}
 ${params.conditionRestrictions.length ? `- Medical restrictions:\n${params.conditionRestrictions.map(r => `  - ${r}`).join('\n')}` : ''}
 ${params.weatherNote ? `- Weather context: ${params.weatherNote}` : ''}
+${params.userHint ? `- USER PREFERENCE FOR TODAY: "${params.userHint}" — try to incorporate this while staying within macro targets` : ''}
 
 Meal slots: BREAKFAST, MORNING_SNACK, LUNCH, EVENING_SNACK, DINNER
 

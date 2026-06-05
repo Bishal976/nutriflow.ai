@@ -1,5 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { buildVisionSystemPrompt, buildVisionUserPrompt } from './prompts/vision'
+import { getMockVisionResult } from './mock-responses'
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
@@ -29,8 +30,10 @@ export async function analyzeImage(params: {
   country: string
   region?: string
 }): Promise<VisionAnalysisResult> {
+  if (process.env.MOCK_AI === 'true') return getMockVisionResult()
+
   const model = genAI.getGenerativeModel({
-    model: 'gemini-1.5-flash',
+    model: 'gemini-flash-latest',
     systemInstruction: buildVisionSystemPrompt(),
   })
 

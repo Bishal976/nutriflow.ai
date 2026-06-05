@@ -21,14 +21,12 @@ export default function DocUploadStep({ onSubmit, loading, onSkip }: Props) {
         </p>
       </div>
 
-      <div style={{ display: 'flex', gap: 12 }}>
-        <button className="btn-secondary" onClick={onSkip} style={{ flex: 1 }}>
-          Skip for now
-        </button>
-        <button className="btn-primary" onClick={onSkip} style={{ flex: 1 }}>
-          Continue →
-        </button>
-      </div>
+      <button className="btn-primary" onClick={onSkip} style={{ width: '100%' }}>
+        Continue to next step →
+      </button>
+      <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', marginTop: -8 }}>
+        Document upload will be available in a future release.
+      </p>
     </div>
   )
 }

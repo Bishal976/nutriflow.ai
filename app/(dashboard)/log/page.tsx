@@ -1,6 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { track } from '@/lib/posthog'
 
 const MEAL_TYPES = [
   { value: 'BREAKFAST', label: 'Breakfast', icon: '🌅' },
@@ -42,21 +43,24 @@ export default function LogMealPage() {
     if (!file) return
     setError(''); setUploading(true)
     try {
-      // First get today's daily log ID
       const planRes = await fetch('/api/plan/generate')
       const planData = await planRes.json()
 
-      // We need a dailyLogId — create one via the plan endpoint then extract it
-      // For now, use a placeholder that the analyze route will handle
+      if (!planData?.dailyLogId) {
+        setError("Couldn't create today's log. Make sure you've completed onboarding.")
+        return
+      }
+
       const formData = new FormData()
       formData.append('image', file)
       formData.append('mealType', mealType)
-      formData.append('dailyLogId', planData?.dailyLogId ?? 'pending')
+      formData.append('dailyLogId', planData.dailyLogId)
 
       const res = await fetch('/api/vision/analyze', { method: 'POST', body: formData })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Upload failed'); return }
 
+      track('meal_photo_uploaded', { mealType })
       router.push(`/log/${data.jobId}?mealLogId=${data.mealLogId}`)
     } catch { setError('Network error. Please try again.') }
     finally { setUploading(false) }

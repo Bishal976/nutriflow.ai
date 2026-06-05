@@ -55,19 +55,43 @@ export default function OnboardingStepPage({ params }: { params: Promise<{ step:
       {/* Progress header */}
       <div style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', padding: '16px 24px' }}>
         <div style={{ maxWidth: 600, margin: '0 auto' }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <span style={{ fontSize: 14 }}>🌿</span>
               </div>
               <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>NutriFlow AI</span>
             </div>
-            <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>Step {step} of 6</span>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>{step} of 6</span>
           </div>
-          {/* Progress bar */}
-          <div style={{ background: 'var(--surface-2)', borderRadius: 4, height: 4, overflow: 'hidden' }}>
-            <div style={{ height: '100%', borderRadius: 4, background: 'var(--primary)', width: `${progress}%`, transition: 'width 0.4s ease' }} />
+          {/* Step dots */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 0 }}>
+            {STEPS.map((s, i) => {
+              const done = step > s.num
+              const active = step === s.num
+              return (
+                <div key={s.num} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : 'none' }}>
+                  <div title={s.title} style={{
+                    width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: 12, fontWeight: 700,
+                    background: done ? 'var(--primary)' : active ? 'var(--primary)' : 'var(--surface-2)',
+                    color: done || active ? 'white' : 'var(--text-muted)',
+                    border: active ? '2px solid var(--primary)' : '2px solid transparent',
+                    boxShadow: active ? '0 0 0 3px rgba(45,125,125,0.2)' : 'none',
+                    transition: 'all 0.3s ease',
+                  }}>
+                    {done ? '✓' : s.num}
+                  </div>
+                  {i < STEPS.length - 1 && (
+                    <div style={{ flex: 1, height: 2, background: done ? 'var(--primary)' : 'var(--surface-2)', transition: 'background 0.3s ease', margin: '0 2px' }} />
+                  )}
+                </div>
+              )
+            })}
           </div>
+          {/* Current step label */}
+          <p style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, marginTop: 8 }}>{stepInfo.title}</p>
         </div>
       </div>
 

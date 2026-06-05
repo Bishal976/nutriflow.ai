@@ -1,7 +1,8 @@
 'use client'
-import { use, useEffect, useState } from 'react'
+import { use, useEffect, useState, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import type { FoodItem, VisionStatusResponse, RebalanceResponse } from '@/types/api'
+import { track } from '@/lib/posthog'
 
 function ConfidenceBadge({ score }: { score: number }) {
   const pct = Math.round(score * 100)
@@ -25,8 +26,7 @@ function DeviationBadge({ delta, label }: { delta: number; label: string }) {
   )
 }
 
-export default function VisionResultPage({ params }: { params: Promise<{ jobId: string }> }) {
-  const { jobId } = use(params)
+function VisionResultInner({ jobId }: { jobId: string }) {
   const searchParams = useSearchParams()
   const mealLogId = searchParams.get('mealLogId')
   const router = useRouter()
@@ -37,20 +37,29 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
   const [rebalance, setRebalance] = useState<RebalanceResponse | null>(null)
   const [error, setError] = useState('')
 
-  // Poll for job completion
   useEffect(() => {
     let attempts = 0
+    const MAX_ATTEMPTS = 30
+
     const poll = async () => {
-      const res = await fetch(`/api/vision/status/${jobId}`)
-      const data: VisionStatusResponse = await res.json()
-      setStatus(data)
-      if (data.status === 'COMPLETED' && data.result) {
-        setFoods(data.result.foods)
-      } else if (data.status === 'FAILED') {
-        setError(data.error ?? 'Analysis failed. Please try again.')
-      } else if (data.status !== 'COMPLETED' && attempts < 30) {
-        attempts++
-        setTimeout(poll, 2000)
+      try {
+        const res = await fetch(`/api/vision/status/${jobId}`)
+        const data: VisionStatusResponse = await res.json()
+        setStatus(data)
+        if (data.status === 'COMPLETED' && data.result) {
+          setFoods(data.result.foods)
+        } else if (data.status === 'FAILED') {
+          setError(data.error ?? 'Analysis failed. Please try again.')
+        } else if (data.status !== 'COMPLETED') {
+          if (attempts < MAX_ATTEMPTS) {
+            attempts++
+            setTimeout(poll, 2000)
+          } else {
+            setError('Analysis is taking too long. Please go back and try again.')
+          }
+        }
+      } catch {
+        setError('Network error while checking analysis status.')
       }
     }
     poll()
@@ -73,6 +82,8 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
       })
       const data: RebalanceResponse = await res.json()
       if (!res.ok) { setError((data as any).error ?? 'Failed to rebalance'); return }
+      track('meal_confirmed', { foodCount: foods.length, totalCalories: foods.reduce((s, f) => s + f.caloriesEstimate, 0) })
+      track('rebalance_completed', { severity: data.deviation?.severity })
       setRebalance(data)
     } catch { setError('Network error.') }
     finally { setConfirming(false) }
@@ -94,8 +105,8 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
     return (
       <div style={{ maxWidth: 520, margin: '0 auto', textAlign: 'center', padding: 40 }}>
         <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-        <p style={{ color: 'var(--error)', marginBottom: 20 }}>{error}</p>
-        <button className="btn-primary" onClick={() => router.push('/dashboard/log')}>Try again</button>
+        <p style={{ color: 'var(--error)', marginBottom: 20, lineHeight: 1.6 }}>{error}</p>
+        <button className="btn-primary" onClick={() => router.push('/log')}>← Try again</button>
       </div>
     )
   }
@@ -112,7 +123,6 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
           <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>Your remaining day has been adjusted.</p>
         </div>
 
-        {/* Deviation summary */}
         <div className="card" style={{ padding: 20 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <h3 style={{ fontWeight: 700, fontSize: 15 }}>Deviation summary</h3>
@@ -135,13 +145,11 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
           </div>
         </div>
 
-        {/* Explanation */}
         <div style={{ background: 'rgba(45,125,125,0.06)', borderRadius: 10, padding: '14px 16px' }}>
           <p style={{ fontSize: 14, color: 'var(--primary)', lineHeight: 1.6 }}>{rebalance.explanation}</p>
           {rebalance.complianceNote && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8, fontStyle: 'italic' }}>{rebalance.complianceNote}</p>}
         </div>
 
-        {/* Rebalanced meals */}
         {rebalance.rebalancedMeals.length > 0 && (
           <div>
             <h3 style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 12 }}>Adjusted remaining meals</h3>
@@ -190,7 +198,6 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
         </div>
       )}
 
-      {/* Food items */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {foods.map((food, i) => (
           <div key={i} className="card" style={{ padding: 16 }}>
@@ -230,10 +237,9 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
         ))}
       </div>
 
-      {/* Totals */}
       <div className="card" style={{ padding: 16, background: 'var(--surface-2)' }}>
         <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 10 }}>This meal total</div>
-        <div style={{ display: 'flex', gap: 20 }}>
+        <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>
           {[
             { label: 'Calories', val: foods.reduce((s, f) => s + f.caloriesEstimate, 0), unit: 'kcal' },
             { label: 'Protein', val: Math.round(foods.reduce((s, f) => s + f.proteinG, 0)), unit: 'g' },
@@ -258,5 +264,14 @@ export default function VisionResultPage({ params }: { params: Promise<{ jobId: 
         You can edit any values above before confirming. Macro estimates are approximate.
       </p>
     </div>
+  )
+}
+
+export default function VisionResultPage({ params }: { params: Promise<{ jobId: string }> }) {
+  const { jobId } = use(params)
+  return (
+    <Suspense>
+      <VisionResultInner jobId={jobId} />
+    </Suspense>
   )
 }

@@ -101,6 +101,16 @@ export async function POST(req: NextRequest) {
       rebalanceExplanation: result.explanation,
     })
 
+    // Persist confirmed food items + macros to the meal log
+    await db.update(mealLogs).set({
+      foodItems: body.confirmedFoods as any,
+      estimatedCalories: Math.round(thisCalories),
+      estimatedProteinG: Math.round(thisProtein * 10) / 10,
+      estimatedCarbsG: Math.round(thisCarbs * 10) / 10,
+      estimatedFatG: Math.round(thisFat * 10) / 10,
+      userConfirmed: true,
+    }).where(eq(mealLogs.id, body.mealLogId))
+
     // Update daily log actuals
     await db.update(dailyLogs).set({
       actualCalories: (dailyLog.actualCalories ?? 0) + thisCalories,
