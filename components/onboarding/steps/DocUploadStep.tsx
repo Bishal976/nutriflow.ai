@@ -22,6 +22,7 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly }:
   const [fileName, setFileName] = useState('')
 
   async function handleFile(file: File) {
+    if (inputRef.current) inputRef.current.value = ''
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
     if (!allowed.includes(file.type)) {
       setErrorMsg('Only PDF, JPG, PNG, or WebP files are supported.')
