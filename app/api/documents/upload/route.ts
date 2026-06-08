@@ -32,10 +32,16 @@ export async function POST(req: NextRequest) {
   const fileBase64 = fileBuffer.toString('base64')
 
   // Upload to Vercel Blob
-  const blob = await put(`medical/${session.userId}/${Date.now()}-${file.name}`, fileBuffer, {
-    access: 'public',
-    contentType: file.type,
-  })
+  let blob: Awaited<ReturnType<typeof put>>
+  try {
+    blob = await put(`medical/${session.userId}/${Date.now()}-${file.name}`, fileBuffer, {
+      access: 'public',
+      contentType: file.type,
+    })
+  } catch (blobErr) {
+    console.error('[document-upload] blob put failed:', blobErr)
+    return NextResponse.json({ error: 'File storage failed. Please try again.' }, { status: 500 })
+  }
 
   // Create pending document record
   const [doc] = await db.insert(medicalDocuments).values({
