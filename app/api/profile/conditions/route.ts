@@ -19,6 +19,9 @@ export async function POST(req: NextRequest) {
   const { conditionCode, conditionLabel, severity } = await req.json()
   if (!conditionCode || !conditionLabel)
     return NextResponse.json({ error: 'conditionCode and conditionLabel required' }, { status: 400 })
+  if (typeof conditionCode !== 'string' || conditionCode.length > 100 ||
+      typeof conditionLabel !== 'string' || conditionLabel.length > 200)
+    return NextResponse.json({ error: 'Invalid input length' }, { status: 400 })
 
   const [condition] = await db.insert(medicalConditions).values({
     userId: session.userId,

@@ -24,7 +24,7 @@ function isRateLimited(ip: string): boolean {
 
 const schema = z.object({
   email: z.string().email(),
-  password: z.string().min(1),
+  password: z.string().min(8),
 })
 
 export async function POST(req: NextRequest) {

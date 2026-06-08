@@ -9,8 +9,8 @@ export async function POST(req: NextRequest) {
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { addMl } = await req.json()
-  if (!addMl || typeof addMl !== 'number' || addMl <= 0)
-    return NextResponse.json({ error: 'addMl must be a positive number' }, { status: 400 })
+  if (!addMl || typeof addMl !== 'number' || addMl <= 0 || addMl > 10000)
+    return NextResponse.json({ error: 'addMl must be between 1 and 10000 ml' }, { status: 400 })
 
   const todayUTC = new Date()
   todayUTC.setUTCHours(0, 0, 0, 0)

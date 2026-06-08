@@ -31,9 +31,21 @@ function FadeIn({ children, delay = 0, className }: { children: React.ReactNode;
   )
 }
 
+const JSON_LD = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'NutriFlow AI',
+  applicationCategory: 'HealthApplication',
+  operatingSystem: 'Web',
+  description: 'Adaptive nutrition planning that auto-corrects your day from a meal photo. Medically-aware, culturally-intelligent, privacy-first.',
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' },
+  featureList: ['AI meal planning', 'Photo-based meal logging', 'Medical condition awareness', 'Indian cuisine support', 'Real-time rebalancing'],
+}
+
 export default function LandingPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#0A0F0F', color: '#E8F0F0', overflowX: 'hidden' }}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(JSON_LD) }} />
 
       {/* Ambient background glow */}
       <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
@@ -251,6 +263,10 @@ export default function LandingPage() {
           <p style={{ fontSize: 12, color: 'rgba(232,240,240,0.3)', lineHeight: 1.6 }}>
             <strong style={{ color: 'rgba(232,240,240,0.5)' }}>Wellness decision-support tool only.</strong> NutriFlow AI is not a medical device and does not provide medical diagnoses or clinical advice. Always consult a qualified healthcare professional before making significant dietary changes.
           </p>
+          <div style={{ marginTop: 12, display: 'flex', gap: 20, justifyContent: 'center' }}>
+            <Link href="/privacy" style={{ fontSize: 12, color: 'rgba(232,240,240,0.35)', textDecoration: 'none' }}>Privacy Policy</Link>
+            <Link href="/terms" style={{ fontSize: 12, color: 'rgba(232,240,240,0.35)', textDecoration: 'none' }}>Terms of Service</Link>
+          </div>
         </div>
       </footer>
     </div>

@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /onboarding/
+Disallow: /profile/
+Disallow: /history/
+Disallow: /log/
+Disallow: /upgrade/
+Disallow: /verify-email/
+
+Sitemap: https://nutriflow-ai.vercel.app/sitemap.xml
