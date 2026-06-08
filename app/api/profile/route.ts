@@ -1,18 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
-import { profiles, medicalConditions } from '@/db/schema'
+import { profiles, medicalConditions, users } from '@/db/schema'
 import { eq } from 'drizzle-orm'
 
 export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const [profile, conditions] = await Promise.all([
+  const [profile, conditions, user] = await Promise.all([
     db.query.profiles.findFirst({ where: eq(profiles.userId, session.userId) }),
     db.query.medicalConditions.findMany({ where: eq(medicalConditions.userId, session.userId) }),
+    db.query.users.findFirst({ where: eq(users.id, session.userId), columns: { plan: true, planExpiresAt: true } }),
   ])
-  return NextResponse.json({ profile, email: session.email, conditions })
+  const isPro = user?.plan === 'pro' && (!user.planExpiresAt || user.planExpiresAt > new Date())
+  return NextResponse.json({ profile, email: session.email, conditions, plan: isPro ? 'pro' : 'free', planExpiresAt: user?.planExpiresAt ?? null })
 }
 
 export async function PATCH(req: NextRequest) {

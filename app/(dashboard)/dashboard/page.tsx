@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useToast } from '@/components/ui/Toast'
 import LoggedMeals from '@/components/dashboard/LoggedMeals'
 import WaterTracker from '@/components/dashboard/WaterTracker'
@@ -73,13 +74,38 @@ function MealCard({ meal }: { meal: MealPlanItem }) {
             </div>
           ))}
           {meal.notes && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 10, fontStyle: 'italic' }}>{meal.notes}</p>}
+          {/* Recipe links */}
+          <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid var(--surface-2)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 12, color: 'var(--text-muted)', alignSelf: 'center' }}>🍳 How to cook:</span>
+            <a
+              href={`https://www.youtube.com/results?search_query=how+to+make+${encodeURIComponent(meal.items[0]?.name ?? labels[meal.mealType])}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, fontWeight: 600, color: '#FF0000', background: 'rgba(255,0,0,0.07)', border: '1px solid rgba(255,0,0,0.2)', borderRadius: 6, padding: '3px 10px', textDecoration: 'none' }}
+            >
+              ▶ YouTube
+            </a>
+            <a
+              href={`https://hebbarskitchen.com/?s=${encodeURIComponent(meal.items[0]?.name ?? '')}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, fontWeight: 600, color: 'var(--primary)', background: 'rgba(45,125,125,0.07)', border: '1px solid rgba(45,125,125,0.2)', borderRadius: 6, padding: '3px 10px', textDecoration: 'none' }}
+            >
+              📖 Hebbars Kitchen
+            </a>
+            <a
+              href={`https://www.archanaskitchen.com/?s=${encodeURIComponent(meal.items[0]?.name ?? '')}`}
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', background: 'var(--surface-2)', border: '1px solid var(--border)', borderRadius: 6, padding: '3px 10px', textDecoration: 'none' }}
+            >
+              🥗 Archana's Kitchen
+            </a>
+          </div>
         </div>
       )}
     </div>
   )
 }
 
-function loadPlan(setData: any, setError: any, setLoading: any, toast: any, regenerate = false, hint = '') {
+function loadPlan(setData: any, setError: any, setLoading: any, toast: any, setUpgradePrompt: any, regenerate = false, hint = '') {
   setLoading(true); setError('')
   const params = new URLSearchParams()
   if (regenerate) params.set('regenerate', '1')
@@ -87,6 +113,7 @@ function loadPlan(setData: any, setError: any, setLoading: any, toast: any, rege
   fetch(`/api/plan/generate?${params}`)
     .then(r => r.json())
     .then(d => {
+      if (d.upgrade) { setUpgradePrompt(true); return }
       if (d.error) { setError(d.error); toast(d.error, 'error') }
       else {
         setData(d)
@@ -107,7 +134,9 @@ export default function DashboardPage() {
   const [error, setError] = useState('')
   const [hint, setHint] = useState('')
   const [showHint, setShowHint] = useState(false)
+  const [upgradePrompt, setUpgradePrompt] = useState(false)
   const { toast } = useToast()
+  const router = useRouter()
 
   useEffect(() => {
     fetch('/api/plan/generate')
@@ -124,39 +153,89 @@ export default function DashboardPage() {
 
   if (loading) return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Header skeleton */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
         <div>
-          <div style={{ width: 160, height: 24, borderRadius: 6, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-          <div style={{ width: 120, height: 16, borderRadius: 6, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', marginTop: 8 }} />
+          <div style={{ width: 150, height: 24, borderRadius: 6, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 110, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', marginTop: 8 }} />
         </div>
-        <div style={{ width: 110, height: 38, borderRadius: 8, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ width: 130, height: 36, borderRadius: 8, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 110, height: 36, borderRadius: 8, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 120, height: 36, borderRadius: 8, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        </div>
       </div>
-      {/* Macro card skeleton */}
+      {/* Macro targets card */}
       <div className="card" style={{ padding: 20 }}>
-        <div style={{ display: 'flex', gap: 24, marginBottom: 20 }}>
-          {[1,2,3,4,5].map(i => (
-            <div key={i} style={{ textAlign: 'center' }}>
-              <div style={{ width: 48, height: 28, borderRadius: 6, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', marginBottom: 6 }} />
-              <div style={{ width: 48, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 18 }}>
+          <div style={{ width: 100, height: 16, borderRadius: 5, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 90, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 0, justifyContent: 'space-between', marginBottom: 18 }}>
+          {[1, 2, 3, 4, 5].map(i => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+              <div style={{ width: 44, height: 26, borderRadius: 5, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ width: 44, height: 22, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
             </div>
           ))}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          {[1,2,3].map(i => <div key={i} style={{ height: 8, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />)}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[1, 2, 3].map(i => (
+            <div key={i}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                <div style={{ width: 60, height: 11, borderRadius: 3, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+                <div style={{ width: 80, height: 11, borderRadius: 3, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              </div>
+              <div style={{ height: 8, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
+          ))}
+        </div>
+        <div style={{ height: 1, background: 'var(--border)', margin: '18px 0' }} />
+        {/* Water tracker skeleton */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+          <div style={{ width: 70, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 80, height: 13, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          {[1, 2, 3].map(i => (
+            <div key={i} style={{ width: 70, height: 32, borderRadius: 20, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          ))}
         </div>
       </div>
-      {/* Meal card skeletons */}
-      {[1,2,3,4].map(i => (
-        <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12 }}>
-          <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-          <div style={{ flex: 1 }}>
-            <div style={{ width: 100, height: 16, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', marginBottom: 6 }} />
-            <div style={{ width: 180, height: 12, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
-          </div>
-          <div style={{ width: 48, height: 20, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      {/* Logged meals section skeleton */}
+      <div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <div style={{ width: 110, height: 18, borderRadius: 5, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          <div style={{ width: 120, height: 13, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
         </div>
-      ))}
+        {[1, 2].map(i => (
+          <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10, borderLeft: '3px solid var(--surface-2)' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ width: 90, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ width: 150, height: 11, borderRadius: 3, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
+            <div style={{ width: 56, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+          </div>
+        ))}
+      </div>
+      {/* Suggested meals section skeleton */}
+      <div>
+        <div style={{ width: 180, height: 18, borderRadius: 5, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', marginBottom: 12 }} />
+        {[1, 2, 3, 4, 5].map(i => (
+          <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ width: 80, height: 15, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ width: 190, height: 12, borderRadius: 3, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+              <div style={{ width: 40, height: 18, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ width: 28, height: 11, borderRadius: 3, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 
@@ -208,7 +287,7 @@ export default function DashboardPage() {
             💡 {showHint ? 'Hide hint' : 'Add preference'}
           </button>
           {data && <button className="btn-secondary" style={{ fontSize: 13, padding: '8px 14px' }}
-            onClick={() => loadPlan(setData, setError, setLoading, toast, true, hint)}>↻ Regenerate</button>}
+            onClick={() => loadPlan(setData, setError, setLoading, toast, setUpgradePrompt, true, hint)}>↻ Regenerate</button>}
           <Link href="/log"><button className="btn-primary" style={{ fontSize: 14 }}>📸 Log a meal</button></Link>
         </div>
       </div>
@@ -226,7 +305,7 @@ export default function DashboardPage() {
           />
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="btn-primary" style={{ fontSize: 13, padding: '8px 18px' }}
-              onClick={() => { setShowHint(false); loadPlan(setData, setError, setLoading, toast, true, hint) }}>
+              onClick={() => { setShowHint(false); loadPlan(setData, setError, setLoading, toast, setUpgradePrompt, true, hint) }}>
               Build plan with this hint
             </button>
             <button className="btn-secondary" style={{ fontSize: 13, padding: '8px 14px' }} onClick={() => { setHint(''); setShowHint(false) }}>Clear</button>
@@ -241,9 +320,28 @@ export default function DashboardPage() {
           <h2 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Ready to plan your day?</h2>
           <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 20, lineHeight: 1.6 }}>Add a preference above or jump straight in.</p>
           <button className="btn-primary" style={{ padding: '12px 28px' }}
-            onClick={() => { setGenerating(true); loadPlan(setData, setError, (v: boolean) => { setLoading(v); setGenerating(v) }, toast, false, hint) }}>
+            onClick={() => { setGenerating(true); loadPlan(setData, setError, (v: boolean) => { setLoading(v); setGenerating(v) }, toast, setUpgradePrompt, false, hint) }}>
             {generating ? 'Building your plan…' : 'Build my plan →'}
           </button>
+        </div>
+      )}
+
+      {/* Inline upgrade prompt — shown when free user tries a Pro feature */}
+      {upgradePrompt && (
+        <div className="card" style={{ padding: 20, border: '2px solid var(--primary)', background: 'rgba(45,125,125,0.03)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)', marginBottom: 4 }}>⚡ Pro feature required</div>
+              <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6, maxWidth: 420 }}>
+                Plan regeneration and custom hints are available on Pro. Upgrade to rebuild your plan anytime with custom preferences.
+              </p>
+            </div>
+            <button onClick={() => setUpgradePrompt(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: 'var(--text-muted)', padding: '0 4px', flexShrink: 0 }}>✕</button>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <Link href="/upgrade"><button className="btn-primary" style={{ fontSize: 13, padding: '8px 18px' }}>View Pro plans →</button></Link>
+            <button className="btn-secondary" style={{ fontSize: 13 }} onClick={() => setUpgradePrompt(false)}>Not now</button>
+          </div>
         </div>
       )}
 

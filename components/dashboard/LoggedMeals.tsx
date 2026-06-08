@@ -114,7 +114,29 @@ export default function LoggedMeals({ dailyLogId }: { dailyLogId?: string }) {
     } finally { setSaving(false) }
   }
 
-  if (loading) return null
+  if (loading) return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div style={{ width: 110, height: 18, borderRadius: 5, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+        <div style={{ width: 120, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {[1, 2].map(i => (
+          <div key={i} className="card" style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 12, borderLeft: '3px solid var(--surface-2)' }}>
+            <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ width: 90, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ width: 150, height: 11, borderRadius: 3, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5, alignItems: 'flex-end' }}>
+              <div style={{ width: 56, height: 14, borderRadius: 4, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <div style={{ width: 72, height: 11, borderRadius: 3, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 
   if (meals.length === 0) return (
     <div style={{ textAlign: 'center', padding: '20px 16px', background: 'var(--surface)', borderRadius: 12, border: '1px solid var(--border)' }}>

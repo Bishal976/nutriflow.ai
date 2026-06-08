@@ -1,0 +1,1 @@
+ALTER TABLE "users" DROP COLUMN "razorpay_subscription_id";

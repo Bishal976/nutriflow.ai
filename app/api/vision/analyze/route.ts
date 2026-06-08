@@ -3,6 +3,7 @@ import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
 import { visionJobs, mealLogs, profiles } from '@/db/schema'
 import { analyzeImage } from '@/lib/ai/vision-analyzer'
+import { getUserPlan, getDailyMealLogCount, FREE_LIMITS, upgradeRequired } from '@/lib/subscription'
 import { eq } from 'drizzle-orm'
 
 export async function POST(req: NextRequest) {
@@ -16,6 +17,15 @@ export async function POST(req: NextRequest) {
     const dailyLogId = formData.get('dailyLogId') as string
 
     if (!file) return NextResponse.json({ error: 'No image provided' }, { status: 400 })
+
+    const userPlan = await getUserPlan(session.userId)
+    if (userPlan === 'free') {
+      const count = await getDailyMealLogCount(session.userId)
+      if (count >= FREE_LIMITS.dailyMealLogs) {
+        return upgradeRequired('meal_log_limit',
+          `Free plan allows ${FREE_LIMITS.dailyMealLogs} meal photos per day. Upgrade to Pro for unlimited logging.`)
+      }
+    }
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
     if (!allowedTypes.includes(file.type))

@@ -1,0 +1,6 @@
+.next/
+out/
+node_modules/
+.turbo/
+public/
+dist/

@@ -1,15 +1,38 @@
 'use client'
 import { useState } from 'react'
 
-interface Props { onSubmit: (data: object) => void; loading: boolean }
+interface Props {
+  onSubmit: (data: object) => void
+  onSaveOnly?: (data: object) => void
+  loading: boolean
+  initialData?: {
+    firstName?: string | null; lastName?: string | null
+    dateOfBirth?: string | null; sex?: string | null
+    heightCm?: number | null; weightKg?: number | null; activityLevel?: string | null
+  }
+}
 
-export default function DemographicsStep({ onSubmit, loading }: Props) {
-  const [form, setForm] = useState({ firstName: '', lastName: '', dateOfBirth: '', sex: '', heightCm: '', weightKg: '', activityLevel: '' })
+export default function DemographicsStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
+  const [form, setForm] = useState({
+    firstName: initialData?.firstName ?? '',
+    lastName: initialData?.lastName ?? '',
+    dateOfBirth: initialData?.dateOfBirth
+      ? new Date(initialData.dateOfBirth).toISOString().split('T')[0]
+      : '',
+    sex: initialData?.sex ?? '',
+    heightCm: initialData?.heightCm ? String(initialData.heightCm) : '',
+    weightKg: initialData?.weightKg ? String(initialData.weightKg) : '',
+    activityLevel: initialData?.activityLevel ?? '',
+  })
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+
+  function buildData() {
+    return { ...form, heightCm: parseFloat(form.heightCm), weightKg: parseFloat(form.weightKg) }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    onSubmit({ ...form, heightCm: parseFloat(form.heightCm), weightKg: parseFloat(form.weightKg) })
+    onSubmit(buildData())
   }
 
   return (
@@ -64,9 +87,17 @@ export default function DemographicsStep({ onSubmit, loading }: Props) {
         </select>
       </div>
 
-      <button className="btn-primary" type="submit" disabled={loading} style={{ marginTop: 8 }}>
-        {loading ? 'Saving…' : 'Continue →'}
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+        {onSaveOnly && (
+          <button type="button" className="btn-secondary" disabled={loading}
+            onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
+            Save & return to profile
+          </button>
+        )}
+        <button className="btn-primary" type="submit" disabled={loading} style={{ flex: 2 }}>
+          {loading ? 'Saving…' : 'Continue →'}
+        </button>
+      </div>
     </form>
   )
 }

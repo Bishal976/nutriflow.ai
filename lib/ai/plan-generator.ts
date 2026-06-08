@@ -36,6 +36,11 @@ function conditionToRestrictions(conditions: string[]): string[] {
     rules.push('No calorie deficit. Include folate-rich foods: leafy greens, lentils, citrus')
     rules.push('Avoid raw/undercooked foods, high-mercury fish, excess vitamin A supplements')
   }
+  if (conditions.some(c => ['eating_disorder', 'anorexia', 'bulimia'].includes(c))) {
+    rules.push('No calorie deficit — frame portions around nourishment and consistency, never restriction')
+    rules.push('Do not use language like "cutting", "restriction", "cheat meal", or weight-loss framing anywhere in meal names or notes')
+    rules.push('Do not suggest skipping meals, replacing meals with shakes, or unusually small portions')
+  }
   return rules
 }
 

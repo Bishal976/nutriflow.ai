@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "razorpay_payment_id" varchar(100);

@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import bcrypt from 'bcryptjs'
+import { randomBytes } from 'crypto'
 import { db } from '@/db/client'
 import { users } from '@/db/schema'
 import { createToken, sessionCookieOptions } from '@/lib/auth/session'
+import { sendVerificationEmail } from '@/lib/email'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -22,7 +24,20 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12)
-    const [user] = await db.insert(users).values({ email, passwordHash }).returning()
+    const verificationToken = randomBytes(48).toString('hex')
+    const verificationExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h
+
+    const [user] = await db.insert(users).values({
+      email,
+      passwordHash,
+      emailVerificationToken: verificationToken,
+      emailVerificationExpiry: verificationExpiry,
+    }).returning()
+
+    // Send verification email — non-blocking, signup succeeds regardless
+    sendVerificationEmail(email, verificationToken).catch(err =>
+      console.error('[signup] Verification email error:', err)
+    )
 
     const token = await createToken({ userId: user.id, email: user.email, isAdmin: false })
     const res = NextResponse.json({ userId: user.id, onboardingComplete: false }, { status: 201 })

@@ -78,9 +78,6 @@ export function classifyRisk(conditions: MedicalConditionCode[]): RiskLevel {
   return 'LOW'
 }
 
-export function requiresClinicianReview(riskLevel: RiskLevel): boolean {
-  return riskLevel === 'CRITICAL' || riskLevel === 'HIGH'
-}
 
 export function computeMacroTargets(
   tdee: number,
@@ -89,8 +86,13 @@ export function computeMacroTargets(
 ): MacroTargets {
   let calories = tdee
 
+  // No calorie deficit for pregnancy or eating-disorder history — immutable code,
+  // not LLM, so this guarantee holds even if the AI prompt is ignored
+  const noDeficit = conditions.includes('pregnancy')
+    || conditions.some(c => ['eating_disorder', 'anorexia', 'bulimia'].includes(c))
+
   if (goal === 'WEIGHT_LOSS') {
-    calories = Math.max(tdee - 500, conditions.includes('pregnancy') ? tdee : 1200)
+    calories = Math.max(tdee - 500, noDeficit ? tdee : 1200)
   } else if (goal === 'WEIGHT_GAIN' || goal === 'MUSCLE_GAIN') {
     calories = tdee + 300
   }

@@ -1,7 +1,12 @@
 'use client'
 import { useState } from 'react'
 
-interface Props { onSubmit: (data: object) => void; loading: boolean }
+interface Props {
+  onSubmit: (data: object) => void
+  onSaveOnly?: (data: object) => void
+  loading: boolean
+  initialData?: { conditionCodes?: string[] }
+}
 
 const CONDITIONS = [
   { code: 'type2_diabetes_medicated', label: 'Type 2 Diabetes (on medication)', group: 'Metabolic' },
@@ -21,14 +26,13 @@ const CONDITIONS = [
   { code: 'eating_disorder', label: 'Eating Disorder (history or current)', group: 'Mental Health' },
 ]
 
-const RISK_MESSAGES: Record<string, { msg: string; color: string }> = {
-  CRITICAL: { msg: '⚠️ Your profile requires clinician review. Your plan will be in conservative mode until a qualified professional approves it. This typically takes 24 hours.', color: '#FEF2F2' },
-  HIGH: { msg: '⚕️ Based on your conditions, certain planning features are restricted for your safety. A clinical review has been queued.', color: '#FFFBEB' },
-}
-
-export default function MedicalContextStep({ onSubmit, loading }: Props) {
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [noConditions, setNoConditions] = useState(false)
+export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
+  const [selected, setSelected] = useState<Set<string>>(() =>
+    new Set(initialData?.conditionCodes ?? [])
+  )
+  const [noConditions, setNoConditions] = useState(() =>
+    initialData?.conditionCodes !== undefined && initialData.conditionCodes.length === 0
+  )
 
   const groups = Array.from(new Set(CONDITIONS.map(c => c.group)))
 
@@ -37,28 +41,23 @@ export default function MedicalContextStep({ onSubmit, loading }: Props) {
     setSelected(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
   }
 
-  function getRiskPreview(): string {
-    const codes = Array.from(selected)
-    const CRITICAL = ['ckd_stage4', 'ckd_stage5', 'dialysis', 'eating_disorder']
-    const HIGH = ['ckd_stage3', 'type1_diabetes', 'pregnancy', 'severe_allergy_anaphylaxis']
-    if (codes.some(c => CRITICAL.includes(c))) return 'CRITICAL'
-    if (codes.some(c => HIGH.includes(c))) return 'HIGH'
-    return 'LOW'
+  function buildData() {
+    if (noConditions) return { conditions: [] }
+    return {
+      conditions: Array.from(selected).map(code => ({
+        conditionCode: code,
+        conditionLabel: CONDITIONS.find(c => c.code === code)!.label,
+        onMedication: code.includes('_medicated'),
+      }))
+    }
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    if (noConditions) { onSubmit({ conditions: [] }); return }
-    const conditions = Array.from(selected).map(code => ({
-      conditionCode: code,
-      conditionLabel: CONDITIONS.find(c => c.code === code)!.label,
-      onMedication: code.includes('_medicated'),
-    }))
-    onSubmit({ conditions })
+    onSubmit(buildData())
   }
 
-  const risk = selected.size > 0 ? getRiskPreview() : null
-  const riskMsg = risk && RISK_MESSAGES[risk]
+  const canSubmit = noConditions || selected.size > 0
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -90,15 +89,17 @@ export default function MedicalContextStep({ onSubmit, loading }: Props) {
         <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--text)' }}>I have none of the above conditions</span>
       </label>
 
-      {riskMsg && (
-        <div style={{ background: riskMsg.color, border: `1px solid ${risk === 'CRITICAL' ? '#FECACA' : '#FDE68A'}`, borderRadius: 10, padding: '12px 16px', fontSize: 13, lineHeight: 1.6 }}>
-          {riskMsg.msg}
-        </div>
-      )}
-
-      <button className="btn-primary" type="submit" disabled={(!noConditions && selected.size === 0) || loading}>
-        {loading ? 'Saving…' : 'Continue →'}
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {onSaveOnly && (
+          <button type="button" className="btn-secondary" disabled={!canSubmit || loading}
+            onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
+            Save & return to profile
+          </button>
+        )}
+        <button className="btn-primary" type="submit" disabled={!canSubmit || loading} style={{ flex: 2 }}>
+          {loading ? 'Saving…' : 'Continue →'}
+        </button>
+      </div>
     </form>
   )
 }

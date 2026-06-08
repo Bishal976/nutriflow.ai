@@ -1,7 +1,12 @@
 'use client'
 import { useState } from 'react'
 
-interface Props { onSubmit: (data: object) => void; loading: boolean }
+interface Props {
+  onSubmit: (data: object) => void
+  onSaveOnly?: (data: object) => void
+  loading: boolean
+  initialData?: { city?: string | null; country?: string | null; timezone?: string | null }
+}
 
 const CITIES = ['Mumbai', 'Delhi', 'Bengaluru', 'Chennai', 'Hyderabad', 'Kolkata', 'Pune', 'Ahmedabad', 'Jaipur', 'Chandigarh', 'Other']
 
@@ -18,18 +23,30 @@ const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
   'Chandigarh': { lat: 30.740,  lon: 76.788 },
 }
 
-export default function LocationStep({ onSubmit, loading }: Props) {
-  const [city, setCity] = useState('')
-  const [customCity, setCustomCity] = useState('')
-  const [country, setCountry] = useState('India')
-  const [timezone, setTimezone] = useState('Asia/Kolkata')
+export default function LocationStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
+  const [city, setCity] = useState(() => {
+    if (!initialData?.city) return ''
+    return CITIES.includes(initialData.city) ? initialData.city : 'Other'
+  })
+  const [customCity, setCustomCity] = useState(() => {
+    if (!initialData?.city || CITIES.includes(initialData.city)) return ''
+    return initialData.city
+  })
+  const [country, setCountry] = useState(initialData?.country ?? 'India')
+  const [timezone, setTimezone] = useState(initialData?.timezone ?? 'Asia/Kolkata')
+
+  function buildData() {
+    const finalCity = city === 'Other' ? customCity : city
+    const coords = CITY_COORDS[finalCity] ?? {}
+    return { city: finalCity, country, timezone, lat: coords.lat ?? null, lon: coords.lon ?? null }
+  }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
-    const finalCity = city === 'Other' ? customCity : city
-    const coords = CITY_COORDS[finalCity] ?? {}
-    onSubmit({ city: finalCity, country, timezone, lat: coords.lat ?? null, lon: coords.lon ?? null })
+    onSubmit(buildData())
   }
+
+  const canSubmit = city && (city !== 'Other' || customCity)
 
   return (
     <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -71,9 +88,17 @@ export default function LocationStep({ onSubmit, loading }: Props) {
         </div>
       </div>
 
-      <button className="btn-primary" type="submit" disabled={(!city || (city === 'Other' && !customCity)) || loading} style={{ marginTop: 8 }}>
-        {loading ? 'Generating your plan…' : '🚀 Build my plan'}
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+        {onSaveOnly && (
+          <button type="button" className="btn-secondary" disabled={!canSubmit || loading}
+            onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
+            Save & return to profile
+          </button>
+        )}
+        <button className="btn-primary" type="submit" disabled={!canSubmit || loading} style={{ flex: 2 }}>
+          {loading ? 'Generating your plan…' : onSaveOnly ? 'Continue →' : '🚀 Build my plan'}
+        </button>
+      </div>
     </form>
   )
 }

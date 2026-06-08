@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
-import { profiles, medicalConditions, users, nutritionTargets, clinicianReviews } from '@/db/schema'
+import { profiles, medicalConditions, users, nutritionTargets } from '@/db/schema'
 import {
   computeBMR, computeTDEE, computeMacroTargets, computeMicroTargets,
-  applyWeatherAdjustment, classifyRisk, requiresClinicianReview
+  applyWeatherAdjustment, classifyRisk
 } from '@/lib/nutrition/engine'
 import { fetchWeatherByCity } from '@/lib/weather/client'
 import { encryptFieldNullable } from '@/lib/crypto/field-encryption'
@@ -64,17 +64,8 @@ export async function POST(req: NextRequest) {
         )
       }
       const riskLevel = classifyRisk(d.conditions.map(c => c.conditionCode))
-      const needsClinician = requiresClinicianReview(riskLevel)
-      await db.update(profiles).set({ riskLevel: riskLevel as any, clinicianReviewRequired: needsClinician })
+      await db.update(profiles).set({ riskLevel: riskLevel as any })
         .where(eq(profiles.userId, session.userId))
-
-      if (needsClinician) {
-        await db.insert(clinicianReviews).values({
-          userId: session.userId,
-          triggerReason: `Risk level ${riskLevel}: ${d.conditions.map(c => c.conditionLabel).join(', ')}`,
-          triggerConditionCodes: d.conditions.map(c => c.conditionCode),
-        })
-      }
     }
 
     if (step === 4) {
@@ -150,20 +141,18 @@ export async function POST(req: NextRequest) {
       const res = NextResponse.json({
         success: true, onboardingComplete: true,
         riskLevel: riskProfile?.riskLevel ?? 'LOW',
-        clinicianReviewRequired: riskProfile?.clinicianReviewRequired ?? false,
         generatedTargets: {
           calories: targets.calories, proteinG: targets.proteinG, carbsG: targets.carbsG,
           fatG: targets.fatG, fiberG: targets.fiberG ?? 25, waterMl: targets.waterMl,
           weatherNote: (targets as any).weatherAdjustmentNote,
         },
-        warnings: riskProfile?.clinicianReviewRequired
-          ? ['Your plan is being reviewed by a qualified professional.'] : [],
+        warnings: [],
       } as IntakeResponse)
       res.cookies.set({ name: 'nf_onboarding', value: '1', path: '/', maxAge: 60 * 60 * 24 * 365 })
       return res
     }
 
-    return NextResponse.json({ success: true, onboardingComplete: false, nextStep: step + 1, riskLevel: 'LOW', clinicianReviewRequired: false, warnings: [] } as IntakeResponse)
+    return NextResponse.json({ success: true, onboardingComplete: false, nextStep: step + 1, riskLevel: 'LOW', warnings: [] } as IntakeResponse)
   } catch (err) {
     console.error('[intake]', err)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

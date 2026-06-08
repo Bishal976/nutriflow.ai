@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { motion, useInView } from 'framer-motion'
-import { useRef } from 'react'
+import { useRef, Fragment } from 'react'
 
 const LOOP_STEPS = [
   { icon: '👤', label: 'Health profile', desc: 'Goals, conditions, cuisine preferences' },
@@ -94,7 +94,7 @@ export default function LandingPage() {
       {/* Proprietary loop */}
       <section style={{ position: 'relative', zIndex: 1, maxWidth: 900, margin: '0 auto', padding: '40px 24px 80px' }}>
         <FadeIn>
-          <div style={{ textAlign: 'center', marginBottom: 48 }}>
+          <div style={{ textAlign: 'center', marginBottom: 52 }}>
             <p style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.12em', color: 'var(--primary)', textTransform: 'uppercase', marginBottom: 12 }}>The proprietary loop</p>
             <h2 style={{ fontSize: 'clamp(24px, 4vw, 36px)', fontWeight: 800, lineHeight: 1.2, letterSpacing: '-0.02em' }}>
               The more you use it,<br />the smarter it gets
@@ -105,22 +105,87 @@ export default function LandingPage() {
           </div>
         </FadeIn>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 16 }}>
-          {LOOP_STEPS.map((step, i) => (
-            <FadeIn key={step.label} delay={i * 0.08}>
-              <div style={{ textAlign: 'center', padding: '0 8px' }}>
-                <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(45,125,125,0.12)', border: '1px solid rgba(45,125,125,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, margin: '0 auto 10px' }}>
-                  {step.icon}
-                </div>
-                <div style={{ fontSize: 13, fontWeight: 700, color: '#E8F0F0', marginBottom: 4 }}>{step.label}</div>
-                <div style={{ fontSize: 11, color: 'rgba(232,240,240,0.45)', lineHeight: 1.4 }}>{step.desc}</div>
+        {/* Steps row — oval loop: top arc forward (1→6), bottom arc return (6→1) */}
+        <div style={{ position: 'relative', paddingTop: 44 }}>
+
+          {/* Top arc: forward direction 1 → 6 */}
+          <FadeIn delay={0.1}>
+            <div style={{ position: 'absolute', left: '3.5%', right: '3.5%', top: 0, height: 36, pointerEvents: 'none', zIndex: 0 }}>
+              <div style={{
+                position: 'absolute', inset: 0,
+                borderTop: '1.5px dashed rgba(45,125,125,0.45)',
+                borderLeft: '1.5px dashed rgba(45,125,125,0.5)',
+                borderRight: '1.5px dashed rgba(76,175,125,0.5)',
+                borderBottom: 'none',
+                borderRadius: '20px 20px 0 0',
+              }} />
+              {/* Teal dot at bottom-left — arc departs from Step 1 */}
+              <div style={{
+                position: 'absolute', bottom: -4, left: -4,
+                width: 8, height: 8, borderRadius: '50%',
+                background: 'rgba(45,125,125,0.75)',
+                boxShadow: '0 0 6px rgba(45,125,125,0.45)',
+              }} />
+              {/* Downward chevron at bottom-right — arc arrives at Step 6, mirrors the upward chevron below */}
+              <div style={{ position: 'absolute', bottom: -10, right: -7 }}>
+                <svg width="14" height="12" viewBox="0 0 14 12" fill="none">
+                  <path d="M2 1 L7 11 L12 1" stroke="rgba(76,175,125,0.85)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
               </div>
-            </FadeIn>
-          ))}
+            </div>
+          </FadeIn>
+
+          {/* Steps */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', position: 'relative', zIndex: 1 }}>
+            {LOOP_STEPS.flatMap((step, i) => {
+              const bg = ['rgba(45,125,125,0.13)','rgba(47,132,115,0.15)','rgba(50,140,108,0.17)','rgba(55,150,105,0.18)','rgba(62,162,100,0.18)','rgba(76,175,125,0.22)'][i]
+              const border = ['rgba(45,125,125,0.38)','rgba(47,132,115,0.40)','rgba(50,140,108,0.42)','rgba(55,150,105,0.44)','rgba(62,162,100,0.46)','rgba(76,175,125,0.55)'][i]
+              return [
+                <div key={step.label} style={{ flex: '1 1 0', minWidth: 0 }}>
+                  <FadeIn delay={0.15 + i * 0.09}>
+                    <div style={{ textAlign: 'center', padding: '0 4px' }}>
+                      <div style={{ width: 52, height: 52, margin: '0 auto 12px', borderRadius: '50%', background: bg, border: `1.5px solid ${border}`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+                        {step.icon}
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#E8F0F0', marginBottom: 3 }}>{step.label}</div>
+                      <div style={{ fontSize: 10, color: 'rgba(232,240,240,0.4)', lineHeight: 1.45 }}>{step.desc}</div>
+                    </div>
+                  </FadeIn>
+                </div>
+              ]
+            })}
+          </div>
+
+          {/* Bottom arc: return direction 6 → 1 */}
+          <FadeIn delay={0.7}>
+            <div style={{ position: 'relative', margin: '4px 3.5% 0', height: 36 }}>
+              <div style={{
+                position: 'absolute', inset: 0,
+                borderLeft: '1.5px dashed rgba(45,125,125,0.5)',
+                borderBottom: '1.5px dashed rgba(45,125,125,0.4)',
+                borderRight: '1.5px dashed rgba(76,175,125,0.5)',
+                borderTop: 'none',
+                borderRadius: '0 0 20px 20px',
+              }} />
+              {/* Green dot at top-right — arc departs from Step 6 */}
+              <div style={{
+                position: 'absolute', top: -4, right: -4,
+                width: 8, height: 8, borderRadius: '50%',
+                background: 'rgba(76,175,125,0.75)',
+                boxShadow: '0 0 6px rgba(76,175,125,0.5)',
+              }} />
+              {/* Upward chevron at top-left — arc returns to Step 1 */}
+              <div style={{ position: 'absolute', top: -10, left: -7 }}>
+                <svg width="14" height="12" viewBox="0 0 14 12" fill="none">
+                  <path d="M2 11 L7 1 L12 11" stroke="rgba(45,125,125,0.9)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
+            </div>
+          </FadeIn>
         </div>
 
-        <FadeIn delay={0.5}>
-          <div style={{ textAlign: 'center', marginTop: 32 }}>
+        <FadeIn delay={0.72}>
+          <div style={{ textAlign: 'center', marginTop: 20 }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, background: 'rgba(45,125,125,0.08)', border: '1px solid rgba(45,125,125,0.2)', borderRadius: 20, padding: '8px 20px' }}>
               <span style={{ fontSize: 14 }}>🔄</span>
               <span style={{ fontSize: 13, color: 'rgba(232,240,240,0.6)' }}>Loop repeats daily, getting more accurate with every log</span>
@@ -134,11 +199,11 @@ export default function LandingPage() {
         <FadeIn>
           <div style={{ background: 'rgba(45,125,125,0.06)', border: '1px solid rgba(45,125,125,0.18)', borderRadius: 20, padding: '40px 32px' }}>
             <p style={{ fontSize: 'clamp(18px, 3vw, 26px)', fontWeight: 700, lineHeight: 1.45, color: '#E8F0F0', letterSpacing: '-0.01em' }}>
-              &ldquo;Not better meal suggestions —<br />
-              <span style={{ color: '#4CAF7D' }}>the operating system for nutritional adherence.</span>&rdquo;
+              Plans don&apos;t fail at planning.<br />
+              <span style={{ color: '#4CAF7D' }}>They fail at recovery.</span>
             </p>
             <p style={{ fontSize: 15, color: 'rgba(232,240,240,0.5)', marginTop: 16, lineHeight: 1.6 }}>
-              First for consumers. Then for clinics, wellness programs, metabolic health, and chronic-condition support — where compliance and daily correction matter more than perfect tracking.
+              NutriFlow closes the gap between what you planned and what you actually ate — meal by meal, in real time. For individuals, that&apos;s a plan that survives real life. For clinics, metabolic programs, and chronic-care teams, it&apos;s the missing layer between appointments — where dietary drift goes undetected until it shows up in lab results.
             </p>
           </div>
         </FadeIn>

@@ -42,6 +42,7 @@ export default function LogMealPage() {
   async function handleSubmit() {
     if (!file) return
     setError(''); setUploading(true)
+    let navigated = false
     try {
       const planRes = await fetch('/api/plan/generate')
       const planData = await planRes.json()
@@ -58,12 +59,18 @@ export default function LogMealPage() {
 
       const res = await fetch('/api/vision/analyze', { method: 'POST', body: formData })
       const data = await res.json()
+      if (res.status === 402 && data.upgrade) {
+        router.push(`/upgrade?reason=${data.feature ?? 'meal_log_limit'}`)
+        navigated = true
+        return
+      }
       if (!res.ok) { setError(data.error ?? 'Upload failed'); return }
 
       track('meal_photo_uploaded', { mealType })
       router.push(`/log/${data.jobId}?mealLogId=${data.mealLogId}`)
+      navigated = true
     } catch { setError('Network error. Please try again.') }
-    finally { setUploading(false) }
+    finally { if (!navigated) setUploading(false) }
   }
 
   return (

@@ -15,11 +15,12 @@ export async function GET() {
     userId: session.userId,
     email: session.email,
     onboardingComplete: user?.onboardingComplete ?? false,
+    plan: user?.plan ?? 'free',
+    planExpiresAt: user?.planExpiresAt ?? null,
     profile: profile ? {
       firstName: profile.firstName,
       lastName: profile.lastName,
       riskLevel: profile.riskLevel,
-      clinicianReviewRequired: profile.clinicianReviewRequired,
       dietType: profile.dietType,
     } : null,
   })

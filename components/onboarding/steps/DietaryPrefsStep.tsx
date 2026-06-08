@@ -1,7 +1,15 @@
 'use client'
 import { useState } from 'react'
 
-interface Props { onSubmit: (data: object) => void; loading: boolean }
+interface Props {
+  onSubmit: (data: object) => void
+  onSaveOnly?: (data: object) => void
+  loading: boolean
+  initialData?: {
+    dietType?: string | null; allergens?: string[] | null
+    cuisinePreferences?: string[] | null; dislikedIngredients?: string[] | null
+  }
+}
 
 const DIET_TYPES = [
   { value: 'VEG', label: 'Vegetarian', icon: '🥦' },
@@ -16,11 +24,11 @@ const ALLERGENS = ['nuts', 'gluten', 'dairy', 'shellfish', 'eggs', 'soy', 'sesam
 
 const CUISINES = ['North Indian', 'South Indian', 'Bengali', 'Gujarati', 'Maharashtrian', 'Punjabi', 'Rajasthani', 'Jain', 'Continental', 'Mediterranean', 'East Asian']
 
-export default function DietaryPrefsStep({ onSubmit, loading }: Props) {
-  const [dietType, setDietType] = useState('')
-  const [allergens, setAllergens] = useState<string[]>([])
-  const [cuisines, setCuisines] = useState<string[]>([])
-  const [disliked, setDisliked] = useState('')
+export default function DietaryPrefsStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
+  const [dietType, setDietType] = useState(initialData?.dietType ?? '')
+  const [allergens, setAllergens] = useState<string[]>(initialData?.allergens ?? [])
+  const [cuisines, setCuisines] = useState<string[]>(initialData?.cuisinePreferences ?? [])
+  const [disliked, setDisliked] = useState(initialData?.dislikedIngredients?.join(', ') ?? '')
 
   function toggleAllergen(a: string) {
     setAllergens(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a])
@@ -29,14 +37,18 @@ export default function DietaryPrefsStep({ onSubmit, loading }: Props) {
     setCuisines(prev => prev.includes(c) ? prev.filter(x => x !== c) : [...prev, c])
   }
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    onSubmit({
+  function buildData() {
+    return {
       dietType,
       allergens,
       cuisinePreferences: cuisines.length > 0 ? cuisines : ['North Indian'],
       dislikedIngredients: disliked.split(',').map(s => s.trim()).filter(Boolean),
-    })
+    }
+  }
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    onSubmit(buildData())
   }
 
   return (
@@ -90,9 +102,17 @@ export default function DietaryPrefsStep({ onSubmit, loading }: Props) {
         <input className="input-field" placeholder="e.g. brinjal, bitter gourd, jackfruit" value={disliked} onChange={e => setDisliked(e.target.value)} />
       </div>
 
-      <button className="btn-primary" type="submit" disabled={!dietType || loading}>
-        {loading ? 'Saving…' : 'Continue →'}
-      </button>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        {onSaveOnly && (
+          <button type="button" className="btn-secondary" disabled={!dietType || loading}
+            onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
+            Save & return to profile
+          </button>
+        )}
+        <button className="btn-primary" type="submit" disabled={!dietType || loading} style={{ flex: 2 }}>
+          {loading ? 'Saving…' : 'Continue →'}
+        </button>
+      </div>
     </form>
   )
 }

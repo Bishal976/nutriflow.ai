@@ -3,11 +3,11 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import LogoutButton from '@/components/dashboard/LogoutButton'
 import { useToast } from '@/components/ui/Toast'
-import { track } from '@/lib/posthog'
 
-const DIET_TYPES = ['VEG', 'VEGAN', 'EGGETARIAN', 'NON_VEG', 'JAIN', 'PESCATARIAN']
-const CUISINES = ['Indian', 'South Indian', 'Punjabi', 'Bengali', 'Gujarati', 'Mediterranean', 'Continental', 'Chinese', 'Thai']
-const COMMON_ALLERGENS = ['Gluten', 'Dairy', 'Nuts', 'Peanuts', 'Soy', 'Eggs', 'Shellfish', 'Fish']
+const DIET_LABELS: Record<string, string> = {
+  VEG: 'Vegetarian', VEGAN: 'Vegan', EGGETARIAN: 'Eggetarian',
+  NON_VEG: 'Non-vegetarian', JAIN: 'Jain', PESCATARIAN: 'Pescatarian',
+}
 const COMMON_CONDITIONS = [
   { code: 'type2_diabetes', label: 'Type 2 Diabetes' },
   { code: 'hypertension', label: 'Hypertension' },
@@ -39,7 +39,7 @@ interface Profile {
   firstName: string | null; lastName: string | null
   dietType: string | null; city: string | null; country: string | null
   allergens: string[]; cuisinePreferences: string[]; dislikedIngredients: string[]
-  riskLevel: string | null; clinicianReviewRequired: boolean | null
+  riskLevel: string | null
 }
 
 interface MedicalCondition {
@@ -51,9 +51,8 @@ export default function ProfilePage() {
   const [profile, setProfile] = useState<Profile | null>(null)
   const [email, setEmail] = useState('')
   const [conditions, setConditions] = useState<MedicalCondition[]>([])
-  const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState<Partial<Profile>>({})
-  const [saving, setSaving] = useState(false)
+  const [plan, setPlan] = useState<'free' | 'pro'>('free')
+  const [planExpiresAt, setPlanExpiresAt] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [addingCondition, setAddingCondition] = useState(false)
   const [conditionSearch, setConditionSearch] = useState('')
@@ -67,51 +66,12 @@ export default function ProfilePage() {
         setProfile(d.profile)
         setEmail(d.email ?? '')
         setConditions(d.conditions ?? [])
+        setPlan(d.plan ?? 'free')
+        setPlanExpiresAt(d.planExpiresAt ?? null)
         setLoading(false)
       })
       .catch(() => setLoading(false))
   }, [])
-
-  function startEdit() {
-    if (!profile) return
-    setForm({
-      firstName: profile.firstName ?? '',
-      lastName: profile.lastName ?? '',
-      dietType: profile.dietType ?? 'VEG',
-      city: profile.city ?? '',
-      country: profile.country ?? '',
-      allergens: profile.allergens ?? [],
-      cuisinePreferences: profile.cuisinePreferences ?? [],
-      dislikedIngredients: profile.dislikedIngredients ?? [],
-    })
-    setEditing(true)
-  }
-
-  async function saveProfile() {
-    setSaving(true)
-    try {
-      const res = await fetch('/api/profile', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
-      })
-      if (res.ok) {
-        setProfile(prev => prev ? { ...prev, ...form } as Profile : prev)
-        setEditing(false)
-        toast('Profile updated')
-        track('profile_updated')
-      } else {
-        toast('Failed to save changes', 'error')
-      }
-    } finally { setSaving(false) }
-  }
-
-  function toggleArray(field: 'allergens' | 'cuisinePreferences', value: string) {
-    setForm(f => {
-      const arr = (f[field] ?? []) as string[]
-      return { ...f, [field]: arr.includes(value) ? arr.filter(x => x !== value) : [...arr, value] }
-    })
-  }
 
   async function addCondition(code: string, label: string) {
     if (conditions.find(c => c.conditionCode === code)) { toast('Already added', 'error'); return }
@@ -122,6 +82,7 @@ export default function ProfilePage() {
     if (res.ok) {
       const d = await res.json()
       setConditions(prev => [...prev, d.condition])
+      setProfile(prev => prev ? { ...prev, riskLevel: d.riskLevel } : prev)
       setAddingCondition(false)
       setConditionSearch('')
       setCustomCondition('')
@@ -135,7 +96,9 @@ export default function ProfilePage() {
       body: JSON.stringify({ conditionId: id }),
     })
     if (res.ok) {
+      const d = await res.json()
       setConditions(prev => prev.filter(c => c.id !== id))
+      setProfile(prev => prev ? { ...prev, riskLevel: d.riskLevel } : prev)
       toast('Condition removed')
     } else { toast('Failed to remove', 'error') }
   }
@@ -147,107 +110,106 @@ export default function ProfilePage() {
     (conditionSearch === '' || c.label.toLowerCase().includes(conditionSearch.toLowerCase()))
   )
 
+  const sk = { background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' } as const
+
   if (loading) return (
-    <div style={{ maxWidth: 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {[1, 2, 3].map(i => <div key={i} className="card" style={{ height: 160, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />)}
+    <div style={{ maxWidth: 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Page title */}
+      <div style={{ width: 90, height: 26, borderRadius: 6, ...sk }} />
+
+      {/* Account card — label short, value wide, anchored to right via marginLeft:auto */}
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ width: 80, height: 16, borderRadius: 5, ...sk, marginBottom: 18 }} />
+        {[240, 180, 200].map((vw, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--surface-2)' }}>
+            <div style={{ width: 58, height: 14, borderRadius: 4, ...sk }} />
+            <div style={{ width: vw, height: 14, borderRadius: 4, ...sk, marginLeft: 'auto' }} />
+          </div>
+        ))}
+      </div>
+
+      {/* Diet preferences card */}
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ width: 140, height: 16, borderRadius: 5, ...sk, marginBottom: 18 }} />
+        {[52, 210, 240].map((vw, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--surface-2)' }}>
+            <div style={{ width: 64, height: 14, borderRadius: 4, ...sk }} />
+            <div style={{ width: vw, height: 14, borderRadius: 4, ...sk, marginLeft: 'auto' }} />
+          </div>
+        ))}
+      </div>
+
+      {/* Health profile card */}
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+          <div style={{ width: 120, height: 16, borderRadius: 5, ...sk }} />
+          <div style={{ width: 74, height: 26, borderRadius: 10, ...sk }} />
+        </div>
+        <div style={{ width: 160, height: 13, borderRadius: 4, ...sk, marginBottom: 16 }} />
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {[130, 156, 112].map((w, i) => (
+            <div key={i} style={{ width: w, height: 32, borderRadius: 20, ...sk }} />
+          ))}
+        </div>
+      </div>
     </div>
   )
 
   return (
     <div style={{ maxWidth: 600, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Profile</h1>
-        {!editing && <button className="btn-secondary" style={{ fontSize: 13, padding: '7px 16px' }} onClick={startEdit}>✏️ Edit</button>}
+      <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Profile</h1>
+
+      {/* Plan status card */}
+      <div className="card" style={{ padding: 20, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 38, height: 38, borderRadius: 10, background: plan === 'pro' ? 'linear-gradient(135deg,#2d7d7d,#4aa8a8)' : 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: 18 }}>{plan === 'pro' ? '⚡' : '🌱'}</span>
+          </div>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
+                {plan === 'pro' ? 'NutriFlow Pro' : 'Free plan'}
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 6,
+                background: plan === 'pro' ? 'linear-gradient(135deg,#2d7d7d,#4aa8a8)' : 'var(--surface-2)',
+                color: plan === 'pro' ? 'white' : 'var(--text-muted)',
+                border: plan === 'pro' ? 'none' : '1px solid var(--border)',
+              }}>
+                {plan === 'pro' ? 'PRO' : 'FREE'}
+              </span>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>
+              {plan === 'pro'
+                ? planExpiresAt ? `Renews ${new Date(planExpiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : 'Active'
+                : '3 meal logs/day · 7-day history'}
+            </div>
+          </div>
+        </div>
+        {plan === 'free' && (
+          <Link href="/upgrade">
+            <button className="btn-primary" style={{ fontSize: 13, padding: '8px 18px' }}>⚡ Upgrade to Pro</button>
+          </Link>
+        )}
       </div>
 
       {/* Account info */}
       <div className="card" style={{ padding: 24 }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>Account</h2>
-        {editing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div className="grid-2">
-              <div>
-                <label className="label">First name</label>
-                <input className="input-field" value={form.firstName ?? ''} onChange={e => setForm(f => ({ ...f, firstName: e.target.value }))} placeholder="First name" />
-              </div>
-              <div>
-                <label className="label">Last name</label>
-                <input className="input-field" value={form.lastName ?? ''} onChange={e => setForm(f => ({ ...f, lastName: e.target.value }))} placeholder="Last name" />
-              </div>
-            </div>
-            <Row label="Email" value={email} />
-            <div className="grid-2">
-              <div>
-                <label className="label">City</label>
-                <input className="input-field" value={form.city ?? ''} onChange={e => setForm(f => ({ ...f, city: e.target.value }))} placeholder="e.g. Mumbai" />
-              </div>
-              <div>
-                <label className="label">Country</label>
-                <input className="input-field" value={form.country ?? ''} onChange={e => setForm(f => ({ ...f, country: e.target.value }))} placeholder="e.g. India" />
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Row label="Email" value={email} />
-            <Row label="Name" value={profile ? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim() || '—' : '—'} />
-            <Row label="Location" value={profile?.city && profile?.country ? `${profile.city}, ${profile.country}` : '—'} />
-          </div>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Row label="Email" value={email} />
+          <Row label="Name" value={profile ? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim() || '—' : '—'} />
+          <Row label="Location" value={profile?.city && profile?.country ? `${profile.city}, ${profile.country}` : '—'} />
+        </div>
       </div>
 
       {/* Diet preferences */}
       <div className="card" style={{ padding: 24 }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 16 }}>Diet preferences</h2>
-        {editing ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <div>
-              <label className="label">Diet type</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                {DIET_TYPES.map(d => (
-                  <button key={d} type="button" onClick={() => setForm(f => ({ ...f, dietType: d }))}
-                    style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `2px solid ${form.dietType === d ? 'var(--primary)' : 'var(--border)'}`, background: form.dietType === d ? 'rgba(45,125,125,0.1)' : 'var(--surface)', color: form.dietType === d ? 'var(--primary)' : 'var(--text-muted)' }}>
-                    {d}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="label">Allergens to exclude</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                {COMMON_ALLERGENS.map(a => {
-                  const selected = (form.allergens ?? []).includes(a)
-                  return (
-                    <button key={a} type="button" onClick={() => toggleArray('allergens', a)}
-                      style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `2px solid ${selected ? 'var(--accent)' : 'var(--border)'}`, background: selected ? 'rgba(232,148,58,0.1)' : 'var(--surface)', color: selected ? '#8B4F00' : 'var(--text-muted)' }}>
-                      {selected ? '⚠ ' : ''}{a}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-            <div>
-              <label className="label">Cuisine preferences</label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 6 }}>
-                {CUISINES.map(c => {
-                  const selected = (form.cuisinePreferences ?? []).includes(c)
-                  return (
-                    <button key={c} type="button" onClick={() => toggleArray('cuisinePreferences', c)}
-                      style={{ padding: '6px 14px', borderRadius: 20, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: `2px solid ${selected ? 'var(--primary)' : 'var(--border)'}`, background: selected ? 'rgba(45,125,125,0.1)' : 'var(--surface)', color: selected ? 'var(--primary)' : 'var(--text-muted)' }}>
-                      {c}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Row label="Diet type" value={profile?.dietType ?? '—'} />
-            <Row label="Allergens" value={profile?.allergens?.length ? profile.allergens.join(', ') : 'None'} />
-            <Row label="Cuisines" value={profile?.cuisinePreferences?.length ? profile.cuisinePreferences.join(', ') : '—'} />
-          </div>
-        )}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Row label="Diet type" value={profile?.dietType ? (DIET_LABELS[profile.dietType] ?? profile.dietType) : '—'} />
+          <Row label="Allergens" value={profile?.allergens?.length ? profile.allergens.join(', ') : 'None'} />
+          <Row label="Cuisines" value={profile?.cuisinePreferences?.length ? profile.cuisinePreferences.join(', ') : '—'} />
+        </div>
       </div>
 
       {/* Health profile */}
@@ -258,12 +220,6 @@ export default function ProfilePage() {
             {profile?.riskLevel ?? 'LOW'} risk
           </span>
         </div>
-
-        {profile?.clinicianReviewRequired && (
-          <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: 'var(--error)', marginBottom: 16 }}>
-            ⚕️ Your profile is awaiting clinician review. Plan is in conservative mode.
-          </div>
-        )}
 
         {/* Conditions list */}
         <div style={{ marginBottom: 12 }}>
@@ -319,20 +275,13 @@ export default function ProfilePage() {
         </div>
       </div>
 
-      {editing && (
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn-primary" style={{ flex: 1 }} disabled={saving} onClick={saveProfile}>{saving ? 'Saving…' : 'Save changes'}</button>
-          <button className="btn-secondary" style={{ flex: 1 }} onClick={() => setEditing(false)}>Cancel</button>
-        </div>
-      )}
-
       {/* Onboarding re-edit */}
       <div className="card" style={{ padding: 24 }}>
         <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>Update onboarding data</h2>
         <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 16, lineHeight: 1.5 }}>Got new test results? Changed your goal? Re-run any section.</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {ONBOARDING_STEPS.map(({ step, icon, label, subtitle }) => (
-            <Link key={step} href={`/onboarding/${step}`} style={{ textDecoration: 'none' }}>
+            <Link key={step} href={`/onboarding/${step}?from=profile`} style={{ textDecoration: 'none' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'var(--surface-2)', cursor: 'pointer', transition: 'background 0.15s' }}
                 onMouseEnter={e => (e.currentTarget.style.background = 'rgba(45,125,125,0.06)')}
                 onMouseLeave={e => (e.currentTarget.style.background = 'var(--surface-2)')}>
@@ -359,9 +308,9 @@ export default function ProfilePage() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--surface-2)' }}>
-      <span style={{ fontSize: 14, color: 'var(--text-muted)' }}>{label}</span>
-      <span style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500 }}>{value}</span>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '6px 0', borderBottom: '1px solid var(--surface-2)' }}>
+      <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>{label}</span>
+      <span style={{ fontSize: 14, color: 'var(--text)', fontWeight: 500, wordBreak: 'break-word' }}>{value}</span>
     </div>
   )
 }

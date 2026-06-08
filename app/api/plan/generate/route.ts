@@ -1,9 +1,46 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
 import { nutritionTargets, profiles, medicalConditions, dailyLogs } from '@/db/schema'
 import { generateDayPlan } from '@/lib/ai/plan-generator'
+import { getUserPlan, upgradeRequired } from '@/lib/subscription'
 import { eq, and, gte, desc } from 'drizzle-orm'
+
+// Fingerprints the inputs that actually shape a generated plan. When a user edits
+// their diet, allergens, cuisine prefs, or medical conditions mid-day, this changes —
+// signalling that the cached plan is stale and should be rebuilt automatically,
+// rather than silently serving a plan based on their old preferences.
+function computePlanInputHash(input: {
+  dietType: string
+  allergens: string[]
+  cuisinePrefs: string[]
+  dislikedIngredients: string[]
+  conditionCodes: string[]
+  calories: number | null
+  proteinG: number | null
+  carbsG: number | null
+  fatG: number | null
+  fiberG: number | null
+  waterMl: number | null
+  weatherNote?: string
+}) {
+  const normalized = JSON.stringify({
+    dietType: input.dietType,
+    allergens: [...input.allergens].sort(),
+    cuisinePrefs: [...input.cuisinePrefs].sort(),
+    dislikedIngredients: [...input.dislikedIngredients].sort(),
+    conditionCodes: [...input.conditionCodes].sort(),
+    calories: input.calories,
+    proteinG: input.proteinG,
+    carbsG: input.carbsG,
+    fatG: input.fatG,
+    fiberG: input.fiberG,
+    waterMl: input.waterMl,
+    weatherNote: input.weatherNote ?? null,
+  })
+  return createHash('sha256').update(normalized).digest('hex').slice(0, 16)
+}
 
 export async function GET(req: NextRequest) {
   const session = await getSession()
@@ -14,6 +51,11 @@ export async function GET(req: NextRequest) {
   const hint = url.searchParams.get('hint') ?? undefined
 
   try {
+    const userPlan = await getUserPlan(session.userId)
+    if (userPlan === 'free' && (forceRegenerate || hint)) {
+      return upgradeRequired('plan_regeneration',
+        'Plan regeneration and custom hints are a Pro feature. Upgrade to rebuild your plan anytime.')
+    }
     const target = await db.query.nutritionTargets.findFirst({
       where: eq(nutritionTargets.userId, session.userId),
       orderBy: [desc(nutritionTargets.createdAt)],
@@ -26,6 +68,26 @@ export async function GET(req: NextRequest) {
     const todayUTC = new Date()
     todayUTC.setUTCHours(0, 0, 0, 0)
 
+    const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, session.userId) })
+    const conditions = await db.query.medicalConditions.findMany({ where: eq(medicalConditions.userId, session.userId) })
+    const conditionCodes = conditions.map(c => c.conditionCode)
+
+    const planInput = {
+      calories: target.targetCalories,
+      proteinG: target.targetProteinG,
+      carbsG: target.targetCarbsG,
+      fatG: target.targetFatG,
+      fiberG: target.targetFiberG,
+      dietType: profile?.dietType ?? 'VEG',
+      allergens: profile?.allergens ?? [],
+      cuisinePrefs: profile?.cuisinePreferences ?? ['Indian'],
+      dislikedIngredients: profile?.dislikedIngredients ?? [],
+      conditionCodes,
+      waterMl: target.targetWaterMl ?? 2500,
+      weatherNote: (target.weatherContext as any)?.weatherAdjustmentNote,
+    }
+    const currentInputHash = computePlanInputHash(planInput)
+
     // Check for existing daily log with cached plan
     const existingLog = await db.query.dailyLogs.findFirst({
       where: and(
@@ -35,7 +97,13 @@ export async function GET(req: NextRequest) {
       orderBy: [desc(dailyLogs.createdAt)],
     })
 
-    if (existingLog?.planData && !forceRegenerate) {
+    // A cached plan is stale if the user changed something that shapes it
+    // (diet type, allergens, conditions, macro targets, etc.) since it was generated.
+    // That invalidation is automatic and free — it's a correctness fix, not a
+    // user-requested regeneration, so it bypasses the Pro-only regenerate gate.
+    const inputChanged = !!existingLog?.planInputHash && existingLog.planInputHash !== currentInputHash
+
+    if (existingLog?.planData && !forceRegenerate && !inputChanged) {
       return NextResponse.json({
         plan: existingLog.planData,
         target: {
@@ -60,22 +128,18 @@ export async function GET(req: NextRequest) {
       })
     }
 
-    const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, session.userId) })
-    const conditions = await db.query.medicalConditions.findMany({ where: eq(medicalConditions.userId, session.userId) })
-    const conditionCodes = conditions.map(c => c.conditionCode)
-
     const plan = await generateDayPlan({
-      calories: target.targetCalories,
-      proteinG: target.targetProteinG,
-      carbsG: target.targetCarbsG,
-      fatG: target.targetFatG,
-      dietType: profile?.dietType ?? 'VEG',
-      allergens: profile?.allergens ?? [],
-      cuisinePrefs: profile?.cuisinePreferences ?? ['Indian'],
-      dislikedIngredients: profile?.dislikedIngredients ?? [],
+      calories: planInput.calories,
+      proteinG: planInput.proteinG,
+      carbsG: planInput.carbsG,
+      fatG: planInput.fatG,
+      dietType: planInput.dietType,
+      allergens: planInput.allergens,
+      cuisinePrefs: planInput.cuisinePrefs,
+      dislikedIngredients: planInput.dislikedIngredients,
       conditions: conditionCodes,
-      waterMl: target.targetWaterMl ?? 2500,
-      weatherNote: (target.weatherContext as any)?.weatherAdjustmentNote,
+      waterMl: planInput.waterMl,
+      weatherNote: planInput.weatherNote,
       userHint: hint,
     })
 
@@ -85,13 +149,14 @@ export async function GET(req: NextRequest) {
       date: todayUTC,
       nutritionTargetId: target.id,
       planData: plan as any,
+      planInputHash: currentInputHash,
       weatherContext: target.weatherContext as any,
     }).onConflictDoNothing()
 
     // If conflict (log already exists), update it with new plan
     if (existingLog) {
       await db.update(dailyLogs)
-        .set({ planData: plan as any, updatedAt: new Date() })
+        .set({ planData: plan as any, planInputHash: currentInputHash, updatedAt: new Date() })
         .where(eq(dailyLogs.id, existingLog.id))
     }
 

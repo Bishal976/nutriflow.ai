@@ -29,7 +29,7 @@ export interface NutritionTargetSummary {
 
 export interface IntakeResponse {
   success: boolean; onboardingComplete: boolean; riskLevel: RiskLevel
-  clinicianReviewRequired: boolean; nextStep?: number
+  nextStep?: number
   generatedTargets?: NutritionTargetSummary; warnings: string[]
 }
 

@@ -3,15 +3,17 @@ import { getSessionFromRequest } from '@/lib/auth/session'
 
 const PUBLIC_PATHS = ['/', '/login', '/signup']
 const ADMIN_PATHS = ['/admin']
+// Server-to-server callbacks — no user session, verified via their own signatures
+const PUBLIC_API_PREFIXES = ['/api/auth', '/api/razorpay/webhook']
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // Allow public assets and API auth routes
+  // Allow public assets and unauthenticated API routes (auth + signed webhooks)
   if (
     pathname.startsWith('/_next') ||
-    pathname.startsWith('/api/auth') ||
     pathname.startsWith('/favicon') ||
+    PUBLIC_API_PREFIXES.some(p => pathname.startsWith(p)) ||
     PUBLIC_PATHS.includes(pathname)
   ) {
     return NextResponse.next()

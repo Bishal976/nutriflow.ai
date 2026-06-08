@@ -8,7 +8,6 @@ export const dietTypeEnum = pgEnum('diet_type', ['VEG', 'NON_VEG', 'VEGAN', 'JAI
 export const goalEnum = pgEnum('goal', ['WEIGHT_LOSS', 'WEIGHT_GAIN', 'MAINTENANCE', 'MUSCLE_GAIN', 'CONDITION_MANAGEMENT'])
 export const mealTypeEnum = pgEnum('meal_type', ['BREAKFAST', 'MORNING_SNACK', 'LUNCH', 'EVENING_SNACK', 'DINNER'])
 export const jobStatusEnum = pgEnum('job_status', ['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED'])
-export const reviewStatusEnum = pgEnum('review_status', ['PENDING', 'IN_REVIEW', 'APPROVED', 'ESCALATED'])
 export const activityLevelEnum = pgEnum('activity_level', ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active'])
 
 export const users = pgTable('users', {
@@ -18,8 +17,15 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
   emailVerified: boolean('email_verified').default(false),
+  emailVerificationToken: varchar('email_verification_token', { length: 128 }),
+  emailVerificationExpiry: timestamp('email_verification_expiry'),
   onboardingComplete: boolean('onboarding_complete').default(false),
   isAdmin: boolean('is_admin').default(false),
+  plan: varchar('plan', { length: 20 }).default('free').notNull(),
+  planActivatedAt: timestamp('plan_activated_at'),
+  planExpiresAt: timestamp('plan_expires_at'),
+  razorpayCustomerId: varchar('razorpay_customer_id', { length: 100 }),
+  razorpayPaymentId: varchar('razorpay_payment_id', { length: 100 }),
 })
 
 export const profiles = pgTable('profiles', {
@@ -44,7 +50,6 @@ export const profiles = pgTable('profiles', {
   lat: real('lat'),
   lon: real('lon'),
   riskLevel: riskLevelEnum('risk_level').default('LOW'),
-  clinicianReviewRequired: boolean('clinician_review_required').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 })
@@ -58,7 +63,6 @@ export const medicalConditions = pgTable('medical_conditions', {
   onMedication: boolean('on_medication').default(false),
   medicationNotes: text('medication_notes'), // AES-256-GCM encrypted
   userConfirmed: boolean('user_confirmed').default(false),
-  clinicianConfirmed: boolean('clinician_confirmed').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [index('medical_conditions_user_idx').on(t.userId)])
 
@@ -111,8 +115,8 @@ export const dailyLogs = pgTable('daily_logs', {
   actualFatG: real('actual_fat_g').default(0),
   actualFiberG: real('actual_fiber_g').default(0),
   waterMl: integer('water_ml').default(0),
-  adherenceScore: real('adherence_score'),
   planData: jsonb('plan_data'),
+  planInputHash: text('plan_input_hash'),
   weatherContext: jsonb('weather_context'),
   notes: text('notes'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -168,21 +172,7 @@ export const deviations = pgTable('deviations', {
   deltaFatG: real('delta_fat_g').notNull(),
   rebalancedMeals: jsonb('rebalanced_meals'),
   rebalanceExplanation: text('rebalance_explanation'),
-  userAcknowledged: boolean('user_acknowledged').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-})
-
-export const clinicianReviews = pgTable('clinician_reviews', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => users.id).notNull(),
-  reviewStatus: reviewStatusEnum('review_status').default('PENDING'),
-  triggerReason: text('trigger_reason').notNull(),
-  triggerConditionCodes: text('trigger_condition_codes').array(),
-  reviewerAdminId: uuid('reviewer_admin_id'),
-  reviewerNotes: text('reviewer_notes'),
-  approvedPlanOverrides: jsonb('approved_plan_overrides'),
-  createdAt: timestamp('created_at').defaultNow().notNull(),
-  reviewedAt: timestamp('reviewed_at'),
 })
 
 export const auditLogs = pgTable('audit_logs', {

@@ -96,7 +96,12 @@ function VisionResultInner({ jobId }: { jobId: string }) {
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔍</div>
         <h2 style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 8 }}>Reading your plate…</h2>
         <p style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 24 }}>Our AI is identifying the foods and estimating portions. This takes 5–10 seconds.</p>
-        <div className="spinner" style={{ width: 36, height: 36, border: '3px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', margin: '0 auto' }} />
+        <div className="spinner" style={{ width: 36, height: 36, border: '3px solid var(--border)', borderTopColor: 'var(--primary)', borderRadius: '50%', margin: '0 auto', marginBottom: 32 }} />
+        <div>
+          <button onClick={() => router.push('/log')} style={{ fontSize: 13, color: 'var(--text-muted)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
+            ← Cancel and go back
+          </button>
+        </div>
       </div>
     )
   }

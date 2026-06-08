@@ -9,19 +9,25 @@ const links = [
   { href: '/profile', label: 'Profile', icon: '👤' },
 ]
 
-export default function DashboardNav() {
+export default function DashboardNav({ isPro = false }: { isPro?: boolean }) {
   const pathname = usePathname()
 
   return (
     <>
       <nav style={{ background: 'var(--surface)', borderBottom: '1px solid var(--border)', position: 'sticky', top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1000, margin: '0 auto', padding: '0 16px', height: 56, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ maxWidth: 1000, margin: '0 auto', padding: '9px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Link href="/dashboard" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none', flexShrink: 0 }}>
             <div style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ fontSize: 14 }}>🌿</span>
             </div>
             <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }} className="mobile-hide">NutriFlow</span>
+            {isPro ? (
+              <span style={{ fontSize: 11, fontWeight: 700, background: 'linear-gradient(135deg,#2d7d7d,#4aa8a8)', color: 'white', borderRadius: 6, padding: '2px 8px', letterSpacing: '0.05em' }} className="mobile-hide">PRO</span>
+            ) : (
+              <span style={{ fontSize: 11, fontWeight: 600, background: 'var(--surface-2)', color: 'var(--text-muted)', borderRadius: 6, padding: '2px 8px', border: '1px solid var(--border)' }} className="mobile-hide">FREE</span>
+            )}
           </Link>
+
           <div className="top-nav-links" style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {links.map(({ href, label, icon, accent }) => {
               const isActive = pathname === href || (href !== '/dashboard' && pathname.startsWith(href))
@@ -48,6 +54,24 @@ export default function DashboardNav() {
                 </Link>
               )
             })}
+            {!isPro && (
+              <Link href="/upgrade" style={{
+                marginLeft: 8,
+                padding: '6px 12px',
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 700,
+                textDecoration: 'none',
+                background: 'rgba(232,148,58,0.1)',
+                color: '#b06000',
+                border: '1.5px solid rgba(232,148,58,0.35)',
+                display: 'flex', alignItems: 'center', gap: 5,
+                transition: 'background 0.15s',
+              }} className="mobile-hide">
+                <span>⚡</span>
+                <span>Upgrade</span>
+              </Link>
+            )}
           </div>
         </div>
       </nav>
@@ -70,6 +94,19 @@ export default function DashboardNav() {
             </Link>
           )
         })}
+        {!isPro && (
+          <Link href="/upgrade" style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            gap: 3, flex: 1, textDecoration: 'none', padding: '6px 4px', borderRadius: 10,
+            color: '#b06000',
+            background: 'rgba(232,148,58,0.08)',
+            border: '1.5px solid rgba(232,148,58,0.25)',
+            margin: '0 2px',
+          }}>
+            <span style={{ fontSize: 20, lineHeight: 1 }}>⚡</span>
+            <span style={{ fontSize: 10, fontWeight: 600 }}>Upgrade</span>
+          </Link>
+        )}
       </div>
     </>
   )

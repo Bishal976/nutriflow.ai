@@ -4,7 +4,7 @@ import { db } from '@/db/client'
 import { dailyLogs, mealLogs, nutritionTargets, profiles, medicalConditions, deviations } from '@/db/schema'
 import { generateRebalancedPlan } from '@/lib/ai/rebalancer'
 import { computeDeviationSeverity, computeRemainingBudget } from '@/lib/nutrition/engine'
-import { eq, and, gte, lte } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 import type { RebalanceRequest, RebalanceResponse } from '@/types/api'
 
 const MEAL_ORDER = ['BREAKFAST', 'MORNING_SNACK', 'LUNCH', 'EVENING_SNACK', 'DINNER']
@@ -24,18 +24,16 @@ export async function POST(req: NextRequest) {
   const body: RebalanceRequest = await req.json()
 
   try {
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1)
-
     const dailyLog = await db.query.dailyLogs.findFirst({
       where: and(eq(dailyLogs.id, body.dailyLogId), eq(dailyLogs.userId, session.userId))
     })
     if (!dailyLog) return NextResponse.json({ error: 'Daily log not found' }, { status: 404 })
 
     const target = await db.query.nutritionTargets.findFirst({
-      where: and(eq(nutritionTargets.userId, session.userId), gte(nutritionTargets.date, today), lte(nutritionTargets.date, tomorrow))
+      where: eq(nutritionTargets.userId, session.userId),
+      orderBy: [desc(nutritionTargets.createdAt)],
     })
-    if (!target) return NextResponse.json({ error: 'No targets found' }, { status: 404 })
+    if (!target) return NextResponse.json({ error: 'No nutrition targets found. Please complete onboarding first.' }, { status: 404 })
 
     // Compute total consumed so far (including this meal)
     const thisCalories = body.confirmedFoods.reduce((s, f) => s + f.caloriesEstimate, 0)

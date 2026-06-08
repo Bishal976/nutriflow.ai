@@ -1,8 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
-import { medicalConditions } from '@/db/schema'
+import { medicalConditions, profiles } from '@/db/schema'
+import { classifyRisk } from '@/lib/nutrition/engine'
 import { eq, and } from 'drizzle-orm'
+
+async function syncRiskLevel(userId: string) {
+  const conditions = await db.query.medicalConditions.findMany({ where: eq(medicalConditions.userId, userId) })
+  const riskLevel = classifyRisk(conditions.map(c => c.conditionCode))
+  await db.update(profiles).set({ riskLevel: riskLevel as any }).where(eq(profiles.userId, userId))
+  return riskLevel
+}
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -20,7 +28,8 @@ export async function POST(req: NextRequest) {
     userConfirmed: true,
   }).returning()
 
-  return NextResponse.json({ condition })
+  const riskLevel = await syncRiskLevel(session.userId)
+  return NextResponse.json({ condition, riskLevel })
 }
 
 export async function DELETE(req: NextRequest) {
@@ -34,5 +43,6 @@ export async function DELETE(req: NextRequest) {
   await db.delete(medicalConditions).where(
     and(eq(medicalConditions.id, conditionId), eq(medicalConditions.userId, session.userId))
   )
-  return NextResponse.json({ success: true })
+  const riskLevel = await syncRiskLevel(session.userId)
+  return NextResponse.json({ success: true, riskLevel })
 }
