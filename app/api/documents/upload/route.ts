@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   let blob: Awaited<ReturnType<typeof put>>
   try {
     blob = await put(`medical/${session.userId}/${Date.now()}-${file.name}`, fileBuffer, {
-      access: 'public',
+      access: 'private',
       contentType: file.type,
     })
   } catch (blobErr) {
