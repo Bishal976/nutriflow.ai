@@ -2,6 +2,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import confetti from 'canvas-confetti'
 
 const FREE_FEATURES = [
   { label: '1 meal plan per day (cached)', included: true },
@@ -75,6 +76,17 @@ function UpgradePageInner() {
   const [launching, setLaunching] = useState<Billing | null>(null)
   const [error, setError] = useState('')
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const celebratedRef = useRef(false)
+
+  function celebrate() {
+    if (celebratedRef.current) return
+    celebratedRef.current = true
+    const burst = (origin: { x: number; y: number }) =>
+      confetti({ particleCount: 80, spread: 70, origin, colors: ['#2D7D7D', '#4CAF7D', '#FFD700', '#FF6B6B', '#A78BFA'] })
+    burst({ x: 0.3, y: 0.6 })
+    setTimeout(() => burst({ x: 0.7, y: 0.5 }), 150)
+    setTimeout(() => burst({ x: 0.5, y: 0.4 }), 300)
+  }
 
   function loadMe() {
     return fetch('/api/auth/me').then(r => r.json()).then(d => {
@@ -84,7 +96,10 @@ function UpgradePageInner() {
   }
 
   useEffect(() => {
-    loadMe().catch(() => {})
+    const isCallback = new URLSearchParams(window.location.search).get('payment') === 'callback'
+    loadMe().then(p => {
+      if (p === 'pro' && isCallback) celebrate()
+    }).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -94,6 +109,7 @@ function UpgradePageInner() {
   function stopWaiting() {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null }
     setWaiting(null)
+    celebrate()
   }
 
   async function handleUpgrade(billing: Billing) {
