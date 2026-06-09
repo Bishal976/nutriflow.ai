@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import LogoutButton from '@/components/dashboard/LogoutButton'
 import { useToast } from '@/components/ui/Toast'
 
@@ -63,7 +64,27 @@ export default function ProfilePage() {
   const [confirmPw, setConfirmPw] = useState('')
   const [pwLoading, setPwLoading] = useState(false)
   const [pwError, setPwError] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deletePw, setDeletePw] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const { toast } = useToast()
+  const router = useRouter()
+
+  async function handleDeleteAccount(e: React.FormEvent) {
+    e.preventDefault()
+    setDeleteError(''); setDeleteLoading(true)
+    try {
+      const res = await fetch('/api/auth/delete-account', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password: deletePw }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setDeleteError(d.error ?? 'Failed'); return }
+      router.push('/?deleted=1')
+    } catch { setDeleteError('Network error. Please try again.') }
+    finally { setDeleteLoading(false) }
+  }
 
   async function handlePasswordChange(e: React.FormEvent) {
     e.preventDefault()
@@ -346,6 +367,33 @@ export default function ProfilePage() {
       </div>
 
       <LogoutButton />
+
+      {/* Danger zone */}
+      <div className="card" style={{ padding: 24, border: '1px solid rgba(220,80,80,0.25)', background: 'rgba(220,80,80,0.03)' }}>
+        <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--error)', marginBottom: 6 }}>Danger zone</h2>
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 14, lineHeight: 1.5 }}>
+          Permanently delete your account and all associated data — meal logs, health profile, documents. This cannot be undone.
+        </p>
+        {!showDeleteConfirm ? (
+          <button onClick={() => setShowDeleteConfirm(true)} style={{ fontSize: 13, padding: '8px 18px', background: 'none', border: '1px solid rgba(220,80,80,0.5)', borderRadius: 8, color: 'var(--error)', cursor: 'pointer', fontWeight: 600 }}>
+            Delete my account
+          </button>
+        ) : (
+          <form onSubmit={handleDeleteAccount} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--error)', margin: 0 }}>Enter your password to confirm:</p>
+            <input type="password" placeholder="Your current password" value={deletePw} onChange={e => setDeletePw(e.target.value)} className="input-field" required autoFocus />
+            {deleteError && <p style={{ fontSize: 13, color: 'var(--error)', margin: 0 }}>{deleteError}</p>}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="submit" disabled={deleteLoading} style={{ fontSize: 13, padding: '8px 18px', background: 'var(--error)', border: 'none', borderRadius: 8, color: 'white', cursor: 'pointer', fontWeight: 600 }}>
+                {deleteLoading ? 'Deleting…' : 'Yes, delete everything'}
+              </button>
+              <button type="button" onClick={() => { setShowDeleteConfirm(false); setDeletePw(''); setDeleteError('') }} className="btn-secondary" style={{ fontSize: 13 }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
 
       <p style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5 }}>
         Medical data is encrypted with AES-256. NutriFlow never sells or shares your health information.

@@ -26,6 +26,8 @@ export const users = pgTable('users', {
   planExpiresAt: timestamp('plan_expires_at'),
   razorpayCustomerId: varchar('razorpay_customer_id', { length: 100 }),
   razorpayPaymentId: varchar('razorpay_payment_id', { length: 100 }),
+  passwordResetToken: varchar('password_reset_token', { length: 128 }),
+  passwordResetExpiry: timestamp('password_reset_expiry'),
 })
 
 export const profiles = pgTable('profiles', {

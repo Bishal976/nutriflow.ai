@@ -73,7 +73,11 @@ export default function SignupPage() {
           Already have an account? <Link href="/login" style={{ color: 'var(--primary)', fontWeight: 600 }}>Sign in</Link>
         </p>
         <p style={{ textAlign: 'center', marginTop: 12, fontSize: 11, color: 'var(--text-muted)', lineHeight: 1.5 }}>
-          By signing up you agree to our Terms of Service. NutriFlow is a wellness tool, not a medical device.
+          By signing up you agree to our{' '}
+          <Link href="/terms" style={{ color: 'var(--primary)' }}>Terms of Service</Link>
+          {' '}and{' '}
+          <Link href="/privacy" style={{ color: 'var(--primary)' }}>Privacy Policy</Link>.
+          NutriFlow is a wellness tool, not a medical device.
         </p>
       </div>
     </div>
