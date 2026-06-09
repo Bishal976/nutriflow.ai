@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromRequest } from '@/lib/auth/session'
 
-const PUBLIC_PATHS = ['/', '/login', '/signup']
+const PUBLIC_PATHS = [
+  '/', '/login', '/signup',
+  '/forgot-password', '/reset-password',
+  '/verify-email',
+  '/terms', '/privacy',
+]
 const ADMIN_PATHS = ['/admin']
 // Server-to-server callbacks — no user session, verified via their own signatures
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/razorpay/webhook']
