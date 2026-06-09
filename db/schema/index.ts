@@ -170,7 +170,7 @@ export const visionJobs = pgTable('vision_jobs', {
 export const deviations = pgTable('deviations', {
   id: uuid('id').primaryKey().defaultRandom(),
   dailyLogId: uuid('daily_log_id').references(() => dailyLogs.id, { onDelete: 'cascade' }).notNull(),
-  mealLogId: uuid('meal_log_id').references(() => mealLogs.id).notNull(),
+  mealLogId: uuid('meal_log_id').references(() => mealLogs.id, { onDelete: 'cascade' }).notNull(),
   triggeredAt: timestamp('triggered_at').defaultNow().notNull(),
   deltaCalories: integer('delta_calories').notNull(),
   deltaProteinG: real('delta_protein_g').notNull(),
