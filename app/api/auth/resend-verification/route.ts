@@ -21,7 +21,12 @@ export async function POST() {
     .set({ emailVerificationToken: token, emailVerificationExpiry: expiry, updatedAt: new Date() })
     .where(eq(users.id, user.id))
 
-  await sendVerificationEmail(user.email, token)
+  try {
+    await sendVerificationEmail(user.email, token)
+  } catch (err) {
+    console.error('[resend-verification] email send failed:', err)
+    return NextResponse.json({ error: 'Failed to send verification email. Please try again later.' }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }

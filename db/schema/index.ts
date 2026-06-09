@@ -64,7 +64,10 @@ export const medicalConditions = pgTable('medical_conditions', {
   medicationNotes: text('medication_notes'), // AES-256-GCM encrypted
   userConfirmed: boolean('user_confirmed').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
-}, (t) => [index('medical_conditions_user_idx').on(t.userId)])
+}, (t) => [
+  index('medical_conditions_user_idx').on(t.userId),
+  index('medical_conditions_user_code_idx').on(t.userId, t.conditionCode),
+])
 
 export const medicalDocuments = pgTable('medical_documents', {
   id: uuid('id').primaryKey().defaultRandom(),

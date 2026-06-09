@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
-import { nutritionTargets, profiles, medicalConditions, dailyLogs } from '@/db/schema'
+import { nutritionTargets, profiles, medicalConditions, dailyLogs, deviations } from '@/db/schema'
 import { generateDayPlan } from '@/lib/ai/plan-generator'
 import { getUserPlan, upgradeRequired } from '@/lib/subscription'
 import { eq, and, gte, desc } from 'drizzle-orm'
@@ -104,8 +104,41 @@ export async function GET(req: NextRequest) {
     const inputChanged = !!existingLog?.planInputHash && existingLog.planInputHash !== currentInputHash
 
     if (existingLog?.planData && !forceRegenerate && !inputChanged) {
+      // Merge rebalanced meals from latest deviation so dashboard reflects post-log adjustments
+      const latestDeviation = await db.query.deviations.findFirst({
+        where: eq(deviations.dailyLogId, existingLog.id),
+        orderBy: [desc(deviations.createdAt)],
+      })
+
+      let planData = existingLog.planData as { meals: Array<{ mealType: string; items: any[]; totalCalories: number; notes?: string }>; hydrationTip: string }
+
+      if (latestDeviation?.rebalancedMeals) {
+        const rawMeals = latestDeviation.rebalancedMeals as Array<{ meal_type: string; items: any[]; total_calories: number }>
+        const byType = new Map(rawMeals.map(m => [m.meal_type, m]))
+        planData = {
+          ...planData,
+          meals: planData.meals.map(meal => {
+            const rb = byType.get(meal.mealType)
+            if (!rb) return meal
+            return {
+              ...meal,
+              items: rb.items.map((i: any) => ({
+                name: i.name,
+                quantity: i.quantity,
+                calories: i.calories,
+                proteinG: i.protein_g,
+                carbsG: i.carbs_g,
+                fatG: i.fat_g,
+              })),
+              totalCalories: rb.total_calories,
+              notes: 'Adjusted after meal logging',
+            }
+          }),
+        }
+      }
+
       return NextResponse.json({
-        plan: existingLog.planData,
+        plan: planData,
         target: {
           targetCalories: target.targetCalories,
           targetProteinG: target.targetProteinG,

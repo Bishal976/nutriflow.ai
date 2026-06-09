@@ -57,6 +57,13 @@
       "when": 1780941607337,
       "tag": "0007_drop_razorpay_subscription_id",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780963385671,
+      "tag": "0008_add_medical_conditions_composite_idx",
+      "breakpoints": true
     }
   ]
 }

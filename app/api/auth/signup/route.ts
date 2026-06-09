@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     const existing = await db.query.users.findFirst({ where: eq(users.email, email) })
     if (existing) {
-      return NextResponse.json({ error: 'Email already registered' }, { status: 409 })
+      return NextResponse.json({ error: 'An account with this email already exists. Please sign in instead.' }, { status: 409 })
     }
 
     const passwordHash = await bcrypt.hash(password, 12)

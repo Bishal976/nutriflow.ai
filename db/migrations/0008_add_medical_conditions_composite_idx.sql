@@ -1,0 +1,1 @@
+CREATE INDEX "medical_conditions_user_code_idx" ON "medical_conditions" USING btree ("user_id","condition_code");

@@ -57,7 +57,33 @@ export default function ProfilePage() {
   const [addingCondition, setAddingCondition] = useState(false)
   const [conditionSearch, setConditionSearch] = useState('')
   const [customCondition, setCustomCondition] = useState('')
+  const [showPasswordForm, setShowPasswordForm] = useState(false)
+  const [currentPw, setCurrentPw] = useState('')
+  const [newPw, setNewPw] = useState('')
+  const [confirmPw, setConfirmPw] = useState('')
+  const [pwLoading, setPwLoading] = useState(false)
+  const [pwError, setPwError] = useState('')
   const { toast } = useToast()
+
+  async function handlePasswordChange(e: React.FormEvent) {
+    e.preventDefault()
+    setPwError('')
+    if (newPw !== confirmPw) { setPwError('Passwords do not match'); return }
+    if (newPw.length < 8) { setPwError('New password must be at least 8 characters'); return }
+    setPwLoading(true)
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+      })
+      const d = await res.json()
+      if (!res.ok) { setPwError(d.error ?? 'Failed to update password'); return }
+      toast('Password updated successfully')
+      setShowPasswordForm(false)
+      setCurrentPw(''); setNewPw(''); setConfirmPw('')
+    } catch { setPwError('Network error. Please try again.') }
+    finally { setPwLoading(false) }
+  }
 
   useEffect(() => {
     fetch('/api/profile')
@@ -200,6 +226,28 @@ export default function ProfilePage() {
           <Row label="Name" value={profile ? `${profile.firstName ?? ''} ${profile.lastName ?? ''}`.trim() || '—' : '—'} />
           <Row label="Location" value={profile?.city && profile?.country ? `${profile.city}, ${profile.country}` : '—'} />
         </div>
+      </div>
+
+      {/* Change password */}
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>Password</h2>
+          <button onClick={() => { setShowPasswordForm(v => !v); setPwError('') }} className="btn-secondary" style={{ fontSize: 12, padding: '6px 14px' }}>
+            {showPasswordForm ? 'Cancel' : 'Change'}
+          </button>
+        </div>
+        {!showPasswordForm && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 6 }}>••••••••</p>}
+        {showPasswordForm && (
+          <form onSubmit={handlePasswordChange} style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <input type="password" placeholder="Current password" value={currentPw} onChange={e => setCurrentPw(e.target.value)} className="input-field" required autoComplete="current-password" />
+            <input type="password" placeholder="New password (min 8 chars)" value={newPw} onChange={e => setNewPw(e.target.value)} className="input-field" required minLength={8} autoComplete="new-password" />
+            <input type="password" placeholder="Confirm new password" value={confirmPw} onChange={e => setConfirmPw(e.target.value)} className="input-field" required autoComplete="new-password" />
+            {pwError && <p style={{ fontSize: 13, color: 'var(--error)', margin: 0 }}>{pwError}</p>}
+            <button type="submit" className="btn-primary" disabled={pwLoading} style={{ fontSize: 13 }}>
+              {pwLoading ? 'Updating…' : 'Update password'}
+            </button>
+          </form>
+        )}
       </div>
 
       {/* Diet preferences */}

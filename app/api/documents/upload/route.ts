@@ -5,7 +5,7 @@ import { db } from '@/db/client'
 import { medicalDocuments, medicalConditions, profiles } from '@/db/schema'
 import { classifyRisk } from '@/lib/nutrition/engine'
 import { extractMedicalDocument } from '@/lib/ai/document-extractor'
-import { eq, and } from 'drizzle-orm'
+import { eq, and, sql } from 'drizzle-orm'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
 type AllowedType = typeof ALLOWED_TYPES[number]
@@ -14,9 +14,20 @@ function isAllowedType(t: string): t is AllowedType {
   return (ALLOWED_TYPES as readonly string[]).includes(t)
 }
 
+const MAX_DOCS_PER_USER = 20
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  // Enforce per-user document limit
+  const existingDocCount = await db.select({ id: medicalDocuments.id })
+    .from(medicalDocuments)
+    .where(eq(medicalDocuments.userId, session.userId))
+    .limit(MAX_DOCS_PER_USER + 1)
+  if (existingDocCount.length >= MAX_DOCS_PER_USER) {
+    return NextResponse.json({ error: `Document limit reached (${MAX_DOCS_PER_USER} max). Please contact support.` }, { status: 400 })
+  }
 
   const formData = await req.formData()
   const file = formData.get('file') as File | null
@@ -74,16 +85,20 @@ export async function POST(req: NextRequest) {
       })
       const existingCodes = new Set(existing.map(c => c.conditionCode))
 
-      for (const label of extracted.conditions) {
-        const code = label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')
-        if (existingCodes.has(code)) continue
-        await db.insert(medicalConditions).values({
-          userId: session.userId,
-          conditionCode: code,
-          conditionLabel: label,
-          userConfirmed: false,
-        })
-        existingCodes.add(code)
+      const toInsert = extracted.conditions
+        .map(label => ({ code: label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), label }))
+        .filter(({ code }) => !existingCodes.has(code))
+
+      if (toInsert.length > 0) {
+        await db.insert(medicalConditions).values(
+          toInsert.map(({ code, label }) => ({
+            userId: session.userId,
+            conditionCode: code,
+            conditionLabel: label,
+            userConfirmed: false,
+          }))
+        )
+        toInsert.forEach(({ code }) => existingCodes.add(code))
       }
 
       const allConditions = await db.query.medicalConditions.findMany({
