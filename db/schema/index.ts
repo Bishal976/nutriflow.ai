@@ -136,7 +136,7 @@ export const dailyLogs = pgTable('daily_logs', {
 export const mealLogs = pgTable('meal_logs', {
   id: uuid('id').primaryKey().defaultRandom(),
   dailyLogId: uuid('daily_log_id').references(() => dailyLogs.id, { onDelete: 'cascade' }).notNull(),
-  userId: uuid('user_id').references(() => users.id).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   mealType: mealTypeEnum('meal_type').notNull(),
   loggedAt: timestamp('logged_at').defaultNow().notNull(),
   sourceType: varchar('source_type', { length: 50 }),
@@ -156,7 +156,7 @@ export const mealLogs = pgTable('meal_logs', {
 
 export const visionJobs = pgTable('vision_jobs', {
   id: uuid('id').primaryKey().defaultRandom(),
-  userId: uuid('user_id').references(() => users.id).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
   imageStorageKey: text('image_storage_key').notNull(),
   status: jobStatusEnum('status').default('PENDING'),
   result: jsonb('result'),
