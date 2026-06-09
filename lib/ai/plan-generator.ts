@@ -54,29 +54,42 @@ export async function generateDayPlan(input: PlanInput): Promise<GeneratedPlan> 
     systemInstruction: buildPlanSystemPrompt(),
   })
 
-  let text = (await model.generateContent(
-    buildPlanUserPrompt({ ...input, conditionRestrictions })
-  )).response.text().trim()
+  let lastErr: unknown
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 1500))
+    try {
+      let text = (await model.generateContent(
+        buildPlanUserPrompt({ ...input, conditionRestrictions })
+      )).response.text().trim()
 
-  text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '')
+      text = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/\s*```$/i, '')
+      const parsed = JSON.parse(text) as GeneratedPlan
 
-  const parsed = JSON.parse(text) as GeneratedPlan
+      const validation = validateRebalancedPlan(
+        parsed.meals.map(m => ({
+          mealType: m.mealType,
+          items: m.items.map(i => ({ name: i.name, quantity: i.quantity, calories: i.calories, proteinG: i.proteinG, carbsG: i.carbsG, fatG: i.fatG })),
+          totalCalories: m.totalCalories,
+        })),
+        { calories: input.calories, proteinG: input.proteinG, carbsG: input.carbsG, fatG: input.fatG },
+        input.allergens,
+        input.conditions,
+        ''
+      )
 
-  const validation = validateRebalancedPlan(
-    parsed.meals.map(m => ({
-      mealType: m.mealType,
-      items: m.items.map(i => ({ name: i.name, quantity: i.quantity, calories: i.calories, proteinG: i.proteinG, carbsG: i.carbsG, fatG: i.fatG })),
-      totalCalories: m.totalCalories,
-    })),
-    { calories: input.calories, proteinG: input.proteinG, carbsG: input.carbsG, fatG: input.fatG },
-    input.allergens,
-    input.conditions,
-    ''
-  )
+      if (!validation.passed) {
+        console.warn('[plan-generator] Validation warnings:', validation.violations)
+      }
 
-  if (!validation.passed) {
-    console.warn('[plan-generator] Validation warnings:', validation.violations)
+      return parsed
+    } catch (err: any) {
+      lastErr = err
+      // Only retry on transient server-side errors (503 overload, 429 rate limit)
+      const isRetryable = err?.status === 503 || err?.status === 429 ||
+        (typeof err?.message === 'string' && (err.message.includes('503') || err.message.includes('429')))
+      if (!isRetryable) throw err
+      console.warn(`[plan-generator] Gemini ${err?.status ?? 'error'} on attempt ${attempt + 1}, retrying…`)
+    }
   }
-
-  return parsed
+  throw lastErr
 }

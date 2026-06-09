@@ -41,6 +41,7 @@ export const profiles = pgTable('profiles', {
   weightKg: real('weight_kg'),
   activityLevel: activityLevelEnum('activity_level'),
   primaryGoal: goalEnum('primary_goal'),
+  secondaryGoals: text('secondary_goals').array().default([]),
   targetWeightKg: real('target_weight_kg'),
   dietType: dietTypeEnum('diet_type'),
   allergens: text('allergens').array(),

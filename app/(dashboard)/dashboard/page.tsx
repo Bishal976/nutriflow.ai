@@ -242,7 +242,14 @@ export default function DashboardPage() {
   if (error) return (
     <div style={{ textAlign: 'center', padding: '60px 24px' }}>
       <p style={{ color: 'var(--error)', marginBottom: 16 }}>{error}</p>
-      <button className="btn-primary" onClick={() => { setError(''); setLoading(true); fetch('/api/plan/generate').then(r => r.json()).then(d => setData(d)).finally(() => setLoading(false)) }}>Retry</button>
+      <button className="btn-primary" onClick={() => {
+        setError(''); setLoading(true)
+        fetch('/api/plan/generate')
+          .then(r => r.json())
+          .then(d => { if (d.error) setError(d.error); else setData(d) })
+          .catch(() => setError('Failed to load your plan.'))
+          .finally(() => setLoading(false))
+      }}>Retry</button>
     </div>
   )
 

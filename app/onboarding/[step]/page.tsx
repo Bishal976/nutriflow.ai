@@ -25,9 +25,14 @@ function OnboardingStepInner({ step }: { step: number }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [profileData, setProfileData] = useState<any>(null)
+  const [profileLoading, setProfileLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/profile').then(r => r.json()).then(d => setProfileData(d)).catch(() => {})
+    fetch('/api/profile')
+      .then(r => r.json())
+      .then(d => setProfileData(d))
+      .catch(() => {})
+      .finally(() => setProfileLoading(false))
   }, [])
 
   const stepInfo = STEPS[step - 1]
@@ -39,8 +44,22 @@ function OnboardingStepInner({ step }: { step: number }) {
       firstName: p.firstName, lastName: p.lastName, dateOfBirth: p.dateOfBirth,
       sex: p.sex, heightCm: p.heightCm, weightKg: p.weightKg, activityLevel: p.activityLevel,
     }
-    if (step === 2) return { primaryGoal: p.primaryGoal, targetWeightKg: p.targetWeightKg }
-    if (step === 3) return { conditionCodes: (profileData.conditions ?? []).map((c: any) => c.conditionCode) }
+    if (step === 2) return {
+      primaryGoal: p.primaryGoal,
+      secondaryGoals: p.secondaryGoals ?? [],
+      targetWeightKg: p.targetWeightKg,
+    }
+    if (step === 3) {
+      // Only include conditions the user explicitly confirmed (step 3 form).
+      // Doc-extracted conditions (userConfirmed=false) must not pollute this step.
+      const userCodes = (profileData.conditions ?? [])
+        .filter((c: any) => c.userConfirmed)
+        .map((c: any) => c.conditionCode)
+      // riskLevel is set when step 3 is submitted — use it to distinguish
+      // "user said none" (riskLevel set, userCodes=[]) from "step 3 not done yet" (riskLevel null)
+      if (p.riskLevel == null) return undefined
+      return { conditionCodes: userCodes }
+    }
     if (step === 5) return {
       dietType: p.dietType, allergens: p.allergens, cuisinePreferences: p.cuisinePreferences,
       dislikedIngredients: p.dislikedIngredients,
@@ -100,6 +119,15 @@ function OnboardingStepInner({ step }: { step: number }) {
   }
 
   const initialData = getInitialData()
+
+  const StepSkeleton = () => (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {[1, 2, 3, 4].map(i => (
+        <div key={i} style={{ height: 58, borderRadius: 10, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite' }} />
+      ))}
+      <div style={{ height: 46, borderRadius: 10, background: 'var(--surface-2)', animation: 'pulse 1.5s ease-in-out infinite', marginTop: 4 }} />
+    </div>
+  )
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
@@ -184,13 +212,16 @@ function OnboardingStepInner({ step }: { step: number }) {
             </div>
           )}
 
-          {/* key=profileData forces remount once data loads so useState picks up initialData */}
-          {step === 1 && <DemographicsStep key={profileData ? 'loaded' : 'init'} onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
-          {step === 2 && <GoalsStep key={profileData ? 'loaded' : 'init'} onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
-          {step === 3 && <MedicalContextStep key={profileData ? 'loaded' : 'init'} onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
-          {step === 4 && <DocUploadStep onSubmit={d => saveStep(d)} loading={loading} onSkip={handleSkip} onSaveOnly={fromProfile ? () => router.push('/profile') : undefined} />}
-          {step === 5 && <DietaryPrefsStep key={profileData ? 'loaded' : 'init'} onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
-          {step === 6 && <LocationStep key={profileData ? 'loaded' : 'init'} onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
+          {profileLoading ? <StepSkeleton /> : (
+            <>
+              {step === 1 && <DemographicsStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
+              {step === 2 && <GoalsStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
+              {step === 3 && <MedicalContextStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
+              {step === 4 && <DocUploadStep onSubmit={d => saveStep(d)} loading={loading} onSkip={handleSkip} onSaveOnly={fromProfile ? () => router.push('/profile') : undefined} />}
+              {step === 5 && <DietaryPrefsStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
+              {step === 6 && <LocationStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
+            </>
+          )}
         </div>
       </div>
     </div>

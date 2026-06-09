@@ -9,7 +9,7 @@ export interface DemographicsPayload {
   firstName: string; lastName: string; dateOfBirth: string
   sex: 'male' | 'female' | 'other'; heightCm: number; weightKg: number; activityLevel: ActivityLevel
 }
-export interface GoalsPayload { primaryGoal: Goal; targetWeightKg?: number }
+export interface GoalsPayload { primaryGoal: Goal; secondaryGoals?: Goal[]; targetWeightKg?: number }
 export interface MedicalContextPayload {
   conditions: Array<{ conditionCode: string; conditionLabel: string; onMedication: boolean; severity?: 'mild' | 'moderate' | 'severe' }>
 }

@@ -5,7 +5,7 @@ interface Props {
   onSubmit: (data: object) => void
   onSaveOnly?: (data: object) => void
   loading: boolean
-  initialData?: { primaryGoal?: string; targetWeightKg?: number | null }
+  initialData?: { primaryGoal?: string; secondaryGoals?: string[]; targetWeightKg?: number | null }
 }
 
 const GOALS = [
@@ -24,9 +24,10 @@ const CONFLICTS: Record<string, string[]> = {
 }
 
 export default function GoalsStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
-  const [goals, setGoals] = useState<string[]>(() =>
-    initialData?.primaryGoal ? [initialData.primaryGoal] : []
-  )
+  const [goals, setGoals] = useState<string[]>(() => {
+    if (!initialData?.primaryGoal) return []
+    return [initialData.primaryGoal, ...(initialData.secondaryGoals ?? [])]
+  })
   const [targetWeight, setTargetWeight] = useState(
     initialData?.targetWeightKg ? String(initialData.targetWeightKg) : ''
   )

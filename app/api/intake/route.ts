@@ -42,8 +42,11 @@ export async function POST(req: NextRequest) {
 
     if (step === 2) {
       const d = data as import('@/types/api').GoalsPayload
-      await db.update(profiles).set({ primaryGoal: d.primaryGoal as any, targetWeightKg: d.targetWeightKg ?? null })
-        .where(eq(profiles.userId, session.userId))
+      await db.update(profiles).set({
+        primaryGoal: d.primaryGoal as any,
+        secondaryGoals: (d.secondaryGoals ?? []) as string[],
+        targetWeightKg: d.targetWeightKg ?? null,
+      }).where(eq(profiles.userId, session.userId))
     }
 
     if (step === 3) {
