@@ -1,3 +1,5 @@
+> **⚠️ LEGAL NOTICE:** This repository is proprietary. Viewing is permitted; copying, redistribution, or use of this code without explicit written permission is strictly prohibited.
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
