@@ -2,7 +2,7 @@ import type { NextConfig } from 'next'
 
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us.i.posthog.com https://app.posthog.com",
+  "script-src 'self' 'unsafe-inline' https://us.i.posthog.com https://app.posthog.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",

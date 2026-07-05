@@ -16,7 +16,6 @@ export async function GET() {
   return NextResponse.json({
     documents: docs.map(d => ({
       id: d.id,
-      storageKey: d.storageKey,
       documentType: d.documentType,
       jobStatus: d.jobStatus,
       extractedData: d.extractedData,

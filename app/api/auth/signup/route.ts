@@ -5,6 +5,7 @@ import { db } from '@/db/client'
 import { users } from '@/db/schema'
 import { createToken, sessionCookieOptions } from '@/lib/auth/session'
 import { sendVerificationEmail } from '@/lib/email'
+import { rateLimit } from '@/lib/auth/rate-limit'
 import { eq } from 'drizzle-orm'
 import { z } from 'zod'
 
@@ -14,6 +15,11 @@ const schema = z.object({
 })
 
 export async function POST(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? 'unknown'
+  if (rateLimit(`signup:${ip}`, 10, 60 * 60 * 1000)) {
+    return NextResponse.json({ error: 'Too many accounts created from this IP. Please try again later.' }, { status: 429 })
+  }
+
   try {
     const body = await req.json()
     const { email, password } = schema.parse(body)

@@ -1,145 +1,77 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { put } from '@vercel/blob'
+import { handleUpload, type HandleUploadBody } from '@vercel/blob/client'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
-import { medicalDocuments, medicalConditions, profiles } from '@/db/schema'
-import { classifyRisk } from '@/lib/nutrition/engine'
-import { extractMedicalDocument } from '@/lib/ai/document-extractor'
-import { eq, and, sql } from 'drizzle-orm'
+import { medicalDocuments } from '@/db/schema'
+import { eq } from 'drizzle-orm'
 import { getUserPlan, FREE_LIMITS, PRO_LIMITS, upgradeRequired } from '@/lib/subscription'
 
-const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
-type AllowedType = typeof ALLOWED_TYPES[number]
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
-function isAllowedType(t: string): t is AllowedType {
-  return (ALLOWED_TYPES as readonly string[]).includes(t)
+async function checkPlanLimit(userId: string, userPlan: string) {
+  const maxDocs = userPlan === 'pro' ? PRO_LIMITS.medicalDocuments : FREE_LIMITS.medicalDocuments
+  const existing = await db.select({ id: medicalDocuments.id })
+    .from(medicalDocuments)
+    .where(eq(medicalDocuments.userId, userId))
+    .limit(maxDocs + 1)
+  return { allowed: existing.length < maxDocs, maxDocs, count: existing.length }
 }
 
-export async function POST(req: NextRequest) {
+// GET: preflight plan-limit check before client starts upload
+export async function GET() {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Enforce per-user document limit based on plan
   const userPlan = await getUserPlan(session.userId)
-  const maxDocs = userPlan === 'pro' ? PRO_LIMITS.medicalDocuments : FREE_LIMITS.medicalDocuments
+  const { allowed } = await checkPlanLimit(session.userId, userPlan)
 
-  const existingDocs = await db.select({ id: medicalDocuments.id })
-    .from(medicalDocuments)
-    .where(eq(medicalDocuments.userId, session.userId))
-    .limit(maxDocs + 1)
-
-  if (existingDocs.length >= maxDocs) {
+  if (!allowed) {
     if (userPlan === 'free') {
       return upgradeRequired('medical_documents',
-        'Free plan includes 1 medical report. Upgrade to Pro to upload unlimited reports and get condition-aware meal targets.')
+        'Free plan includes 1 medical report. Upgrade to Pro to upload unlimited reports.')
     }
-    return NextResponse.json({ error: `Document limit reached (${maxDocs} max).` }, { status: 400 })
+    return NextResponse.json({ error: 'Document limit reached.' }, { status: 400 })
   }
 
-  const formData = await req.formData()
-  const file = formData.get('file') as File | null
-  if (!file) return NextResponse.json({ error: 'No file provided' }, { status: 400 })
-  if (!isAllowedType(file.type))
-    return NextResponse.json({ error: 'Only PDF, JPG, PNG, or WebP allowed' }, { status: 400 })
-  if (file.size > 10 * 1024 * 1024)
-    return NextResponse.json({ error: 'File too large. Maximum 10MB.' }, { status: 400 })
+  return NextResponse.json({ canUpload: true })
+}
 
-  // Read buffer once — used for both blob upload and base64 extraction
-  const arrayBuffer = await file.arrayBuffer()
-  const fileBuffer = Buffer.from(arrayBuffer)
-  const fileBase64 = fileBuffer.toString('base64')
+// POST: handleUpload protocol — handles both token generation and upload completion
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const body = (await request.json()) as HandleUploadBody
 
-  // Upload to Vercel Blob
-  let blob: Awaited<ReturnType<typeof put>>
   try {
-    blob = await put(`medical/${session.userId}/${Date.now()}-${file.name}`, fileBuffer, {
-      access: 'private',
-      contentType: file.type,
-    })
-  } catch (blobErr) {
-    console.error('[document-upload] blob put failed:', blobErr)
-    return NextResponse.json({ error: 'File storage failed. Please try again.' }, { status: 500 })
-  }
+    const jsonResponse = await handleUpload({
+      body,
+      request,
+      onBeforeGenerateToken: async (_pathname) => {
+        const session = await getSession()
+        if (!session) throw new Error('Unauthorized')
 
-  // Create pending document record
-  const [doc] = await db.insert(medicalDocuments).values({
-    userId: session.userId,
-    storageKey: blob.url,
-    documentType: 'other',
-    jobStatus: 'PROCESSING',
-  }).returning()
+        const userPlan = await getUserPlan(session.userId)
+        const { allowed } = await checkPlanLimit(session.userId, userPlan)
+        if (!allowed) throw new Error('UPGRADE_REQUIRED')
 
-  // Extract synchronously (same pattern as vision/analyze)
-  try {
-
-    const extracted = await extractMedicalDocument({
-      fileBase64,
-      mimeType: file.type as AllowedType,
+        return {
+          allowedContentTypes: ALLOWED_TYPES,
+          maximumSizeInBytes: 10 * 1024 * 1024,
+          addRandomSuffix: true,
+          tokenPayload: JSON.stringify({ userId: session.userId }),
+        }
+      },
+      onUploadCompleted: async () => {
+        // Client calls /api/documents/process for extraction
+      },
     })
 
-
-    await db.update(medicalDocuments).set({
-      documentType: extracted.documentType,
-      extractedData: extracted as any,
-      confidenceScore: extracted.confidence,
-      jobStatus: 'COMPLETED',
-    }).where(eq(medicalDocuments.id, doc.id))
-
-    // Auto-merge extracted conditions — skip any (userId, conditionCode) that already exist
-    if (extracted.conditions.length > 0) {
-      const existing = await db.query.medicalConditions.findMany({
-        where: eq(medicalConditions.userId, session.userId),
-      })
-      const existingCodes = new Set(existing.map(c => c.conditionCode))
-
-      const toInsert = extracted.conditions
-        .map(label => ({ code: label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), label }))
-        .filter(({ code }) => !existingCodes.has(code))
-
-      if (toInsert.length > 0) {
-        await db.insert(medicalConditions).values(
-          toInsert.map(({ code, label }) => ({
-            userId: session.userId,
-            conditionCode: code,
-            conditionLabel: label,
-            userConfirmed: false,
-          }))
-        )
-        toInsert.forEach(({ code }) => existingCodes.add(code))
-      }
-
-      const allConditions = await db.query.medicalConditions.findMany({
-        where: eq(medicalConditions.userId, session.userId),
-      })
-      const riskLevel = classifyRisk(allConditions.map(c => c.conditionCode))
-      await db.update(profiles).set({ riskLevel: riskLevel as any }).where(eq(profiles.userId, session.userId))
+    return NextResponse.json(jsonResponse)
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Upload failed'
+    if (msg === 'Unauthorized') return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    if (msg === 'UPGRADE_REQUIRED') {
+      return NextResponse.json({ upgrade: true, reason: 'medical_documents',
+        error: 'Free plan includes 1 medical report. Upgrade to Pro for unlimited uploads.' }, { status: 402 })
     }
-
-    // Store medication notes on conditions that have no notes yet
-    if (extracted.medications.length > 0) {
-      const medNotes = extracted.medications
-        .map(m => [m.name, m.dose, m.frequency].filter(Boolean).join(' '))
-        .join(', ')
-      await db.update(medicalConditions)
-        .set({ medicationNotes: medNotes, onMedication: true })
-        .where(and(
-          eq(medicalConditions.userId, session.userId),
-          eq(medicalConditions.onMedication, false),
-        ))
-    }
-
-    return NextResponse.json({
-      documentId: doc.id,
-      blobUrl: blob.url,
-      extracted,
-    })
-  } catch (err) {
-    await db.update(medicalDocuments).set({ jobStatus: 'FAILED' }).where(eq(medicalDocuments.id, doc.id))
-    console.error('[document-extractor] failed:', err)
-    return NextResponse.json({
-      documentId: doc.id,
-      blobUrl: blob.url,
-      error: 'Extraction failed — document saved but could not parse contents.',
-    }, { status: 207 })
+    return NextResponse.json({ error: msg }, { status: 400 })
   }
 }

@@ -1,10 +1,10 @@
 'use client'
 import { useRef, useState, useEffect } from 'react'
+import { upload } from '@vercel/blob/client'
 import { useRouter } from 'next/navigation'
 
 interface ExistingDoc {
   id: string
-  storageKey: string
   documentType: string | null
   jobStatus: string
   extractedData: any
@@ -65,19 +65,37 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly, e
     const id = `${Date.now()}-${Math.random()}`
     setItems(prev => [...prev, { id, fileName: file.name, state: 'uploading' }])
 
-    const form = new FormData()
-    form.append('file', file)
-
     try {
-      const res = await fetch('/api/documents/upload', { method: 'POST', body: form })
-      const data = await res.json()
-      if (res.status === 402 && data.upgrade) {
-        // Remove the pending item and show upgrade CTA
+      // Step 1: preflight — check plan limit before starting upload
+      const checkRes = await fetch('/api/documents/upload', { method: 'GET' })
+      const checkData = await checkRes.json()
+      if (checkRes.status === 402 && checkData.upgrade) {
         setItems(prev => prev.filter(i => i.id !== id))
         setHitUpgradeLimit(true)
         return
       }
-      if (!res.ok && res.status !== 207) throw new Error(data.error || 'Upload failed')
+      if (!checkRes.ok) throw new Error(checkData.error || 'Upload check failed')
+
+      // Step 2: upload directly from browser to Vercel Blob (bypasses 4.5MB function limit)
+      const blob = await upload(file.name, file, {
+        access: 'private',
+        handleUploadUrl: '/api/documents/upload',
+        multipart: true,
+      })
+
+      // Step 3: server-side extraction from stored blob
+      const res = await fetch('/api/documents/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ blobUrl: blob.url, fileType: file.type, fileName: file.name }),
+      })
+      const data = await res.json()
+      if (res.status === 402 && data.upgrade) {
+        setItems(prev => prev.filter(i => i.id !== id))
+        setHitUpgradeLimit(true)
+        return
+      }
+      if (!res.ok && res.status !== 207) throw new Error(data.error || 'Processing failed')
       updateItem(id, { state: 'done', extracted: data.extracted ?? undefined })
     } catch (e) {
       updateItem(id, {
@@ -143,7 +161,7 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly, e
                   </div>
                 </div>
                 <a
-                  href={doc.storageKey}
+                  href={`/api/documents/${doc.id}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', flexShrink: 0, padding: '4px 10px', border: '1px solid var(--primary)', borderRadius: 6 }}

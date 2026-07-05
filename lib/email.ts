@@ -2,7 +2,11 @@ import { Resend } from 'resend'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 const FROM = process.env.RESEND_FROM_EMAIL ?? 'onboarding@resend.dev'
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+// VERCEL_URL is auto-set by Vercel (e.g. nutriflow-ai.vercel.app); use as fallback when
+// NEXT_PUBLIC_APP_URL isn't explicitly configured so email links never point to localhost.
+const APP_URL =
+  process.env.NEXT_PUBLIC_APP_URL ||
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
 
 export async function sendVerificationEmail(email: string, token: string) {
   const link = `${APP_URL}/api/auth/verify?token=${token}`
@@ -40,9 +44,8 @@ export async function sendVerificationEmail(email: string, token: string) {
   }
 
   if (error) {
-    console.error('[email] sendVerificationEmail failed:', JSON.stringify(error))
-    // In dev, don't hard-fail — link is printed above
-    if (process.env.NODE_ENV === 'production') throw new Error(`Email send failed: ${(error as any).message}`)
+    console.error('[email] sendVerificationEmail failed — name:', (error as any).name, 'message:', (error as any).message, 'statusCode:', (error as any).statusCode)
+    if (process.env.NODE_ENV === 'production') throw new Error(`Email send failed: ${(error as any).message ?? JSON.stringify(error)}`)
     return null
   }
 
@@ -79,8 +82,8 @@ export async function sendPasswordResetEmail(email: string, token: string) {
   })
 
   if (error) {
-    console.error('[email] sendPasswordResetEmail failed:', error)
-    throw new Error(`Email send failed: ${error.message}`)
+    console.error('[email] sendPasswordResetEmail failed — name:', (error as any).name, 'message:', (error as any).message, 'statusCode:', (error as any).statusCode)
+    throw new Error(`Email send failed: ${(error as any).message ?? JSON.stringify(error)}`)
   }
 
   return data

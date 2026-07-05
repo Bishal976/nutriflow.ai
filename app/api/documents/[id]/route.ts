@@ -1,10 +1,36 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { del } from '@vercel/blob'
+import { del, get } from '@vercel/blob'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
 import { medicalDocuments, medicalConditions, profiles } from '@/db/schema'
 import { classifyRisk } from '@/lib/nutrition/engine'
 import { eq, and } from 'drizzle-orm'
+
+// GET: stream blob content to the authenticated owner (never exposes raw blob URL)
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+  const doc = await db.query.medicalDocuments.findFirst({
+    where: and(eq(medicalDocuments.id, id), eq(medicalDocuments.userId, session.userId)),
+  })
+  if (!doc) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const blobResult = await get(doc.storageKey, { access: 'private' })
+  if (!blobResult || blobResult.statusCode !== 200) {
+    return NextResponse.json({ error: 'File not found in storage' }, { status: 404 })
+  }
+
+  const contentType = blobResult.blob.contentType ?? 'application/octet-stream'
+  return new NextResponse(blobResult.stream as any, {
+    headers: {
+      'Content-Type': contentType,
+      'Content-Disposition': `inline; filename="document-${id}"`,
+      'Cache-Control': 'private, no-store',
+    },
+  })
+}
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession()
