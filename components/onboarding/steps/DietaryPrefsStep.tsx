@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 interface Props {
   onSubmit: (data: object) => void
@@ -29,6 +29,16 @@ export default function DietaryPrefsStep({ onSubmit, onSaveOnly, loading, initia
   const [allergens, setAllergens] = useState<string[]>(initialData?.allergens ?? [])
   const [cuisines, setCuisines] = useState<string[]>(initialData?.cuisinePreferences ?? [])
   const [disliked, setDisliked] = useState(initialData?.dislikedIngredients?.join(', ') ?? '')
+  const initialSnap = useRef({
+    dietType: initialData?.dietType ?? '',
+    allergens: [...(initialData?.allergens ?? [])].sort().join(','),
+    cuisines: [...(initialData?.cuisinePreferences ?? [])].sort().join(','),
+    disliked: initialData?.dislikedIngredients?.join(', ') ?? '',
+  })
+  const isDirty = dietType !== initialSnap.current.dietType ||
+    [...allergens].sort().join(',') !== initialSnap.current.allergens ||
+    [...cuisines].sort().join(',') !== initialSnap.current.cuisines ||
+    disliked !== initialSnap.current.disliked
 
   function toggleAllergen(a: string) {
     setAllergens(prev => prev.includes(a) ? prev.filter(x => x !== a) : [...prev, a])
@@ -104,7 +114,7 @@ export default function DietaryPrefsStep({ onSubmit, onSaveOnly, loading, initia
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {onSaveOnly && (
-          <button type="button" className="btn-secondary" disabled={!dietType || loading}
+          <button type="button" className="btn-secondary" disabled={!dietType || loading || !isDirty}
             onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
             Save & return to profile
           </button>

@@ -1,8 +1,17 @@
 'use client'
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
-interface Props { onSubmit: (data: object) => void; loading: boolean; onSkip: () => void; onSaveOnly?: () => void }
+interface ExistingDoc {
+  id: string
+  storageKey: string
+  documentType: string | null
+  jobStatus: string
+  extractedData: any
+  createdAt: string | Date
+}
+
+interface Props { onSubmit: (data: object) => void; loading: boolean; onSkip: () => void; onSaveOnly?: () => void; existingDocs?: ExistingDoc[] }
 
 interface ExtractedLabValue { name: string; value: string; unit: string; flag?: string }
 interface Extracted {
@@ -21,12 +30,16 @@ interface UploadItem {
   errorMsg?: string
 }
 
-export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly }: Props) {
+export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly, existingDocs = [] }: Props) {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<UploadItem[]>([])
   const [dropError, setDropError] = useState('')
   const [hitUpgradeLimit, setHitUpgradeLimit] = useState(false)
+  const [savedDocs, setSavedDocs] = useState<ExistingDoc[]>(existingDocs)
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => { setSavedDocs(existingDocs) }, [existingDocs])
 
   const isUploading = items.some(i => i.state === 'uploading')
   const hasSuccess = items.some(i => i.state === 'done')
@@ -85,6 +98,18 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly }:
     setItems(prev => prev.filter(i => i.id !== id))
   }
 
+  async function deleteSavedDoc(id: string) {
+    setDeletingIds(prev => new Set(prev).add(id))
+    try {
+      const res = await fetch(`/api/documents/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        setSavedDocs(prev => prev.filter(d => d.id !== id))
+      }
+    } finally {
+      setDeletingIds(prev => { const s = new Set(prev); s.delete(id); return s })
+    }
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ background: 'rgba(45,125,125,0.06)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
@@ -98,6 +123,45 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly }:
         style={{ display: 'none' }}
         onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
       />
+
+      {/* Previously saved documents (edit mode) */}
+      {savedDocs.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Previously uploaded</div>
+          {savedDocs.map(doc => {
+            const label = doc.documentType
+              ? doc.documentType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, c => c.toUpperCase())
+              : 'Medical document'
+            const deleting = deletingIds.has(doc.id)
+            return (
+              <div key={doc.id} style={{ background: 'rgba(45,125,125,0.06)', border: '1.5px solid var(--primary)', borderRadius: 12, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 10, opacity: deleting ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                <span style={{ fontSize: 18, flexShrink: 0 }}>📄</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--text)' }}>{label}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    {doc.jobStatus === 'DONE' ? 'Processed' : 'Processing'} · {new Date(doc.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <a
+                  href={doc.storageKey}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 600, textDecoration: 'none', flexShrink: 0, padding: '4px 10px', border: '1px solid var(--primary)', borderRadius: 6 }}
+                >
+                  View
+                </a>
+                <button
+                  onClick={() => deleteSavedDoc(doc.id)}
+                  disabled={deleting}
+                  style={{ background: 'none', border: 'none', cursor: deleting ? 'default' : 'pointer', color: '#c0392b', fontSize: 13, fontWeight: 600, flexShrink: 0, padding: '4px 8px' }}
+                >
+                  {deleting ? '…' : 'Delete'}
+                </button>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* Completed / failed items list */}
       {items.length > 0 && (

@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 interface Props {
   onSubmit: (data: object) => void
@@ -33,6 +33,9 @@ export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, init
   const [noConditions, setNoConditions] = useState(() =>
     initialData?.conditionCodes !== undefined && initialData.conditionCodes.length === 0
   )
+  const initialSelected = useRef([...(initialData?.conditionCodes ?? [])].sort().join(','))
+  const initialNoConditions = useRef(initialData?.conditionCodes !== undefined && initialData.conditionCodes.length === 0)
+  const isDirty = [...selected].sort().join(',') !== initialSelected.current || noConditions !== initialNoConditions.current
 
   const groups = Array.from(new Set(CONDITIONS.map(c => c.group)))
 
@@ -91,7 +94,7 @@ export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, init
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
         {onSaveOnly && (
-          <button type="button" className="btn-secondary" disabled={!canSubmit || loading}
+          <button type="button" className="btn-secondary" disabled={!canSubmit || loading || !isDirty}
             onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
             Save & return to profile
           </button>

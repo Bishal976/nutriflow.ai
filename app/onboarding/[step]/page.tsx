@@ -26,14 +26,19 @@ function OnboardingStepInner({ step }: { step: number }) {
   const [error, setError] = useState('')
   const [profileData, setProfileData] = useState<any>(null)
   const [profileLoading, setProfileLoading] = useState(true)
+  const [existingDocs, setExistingDocs] = useState<any[]>([])
 
   useEffect(() => {
-    fetch('/api/profile')
-      .then(r => r.json())
-      .then(d => setProfileData(d))
-      .catch(() => {})
-      .finally(() => setProfileLoading(false))
-  }, [])
+    const fetches: Promise<any>[] = [
+      fetch('/api/profile').then(r => r.json()).then(d => setProfileData(d)).catch(() => {}),
+    ]
+    if (step === 4) {
+      fetches.push(
+        fetch('/api/documents').then(r => r.json()).then(d => setExistingDocs(d.documents ?? [])).catch(() => {})
+      )
+    }
+    Promise.all(fetches).finally(() => setProfileLoading(false))
+  }, [step])
 
   const stepInfo = STEPS[step - 1]
 
@@ -50,14 +55,9 @@ function OnboardingStepInner({ step }: { step: number }) {
       targetWeightKg: p.targetWeightKg,
     }
     if (step === 3) {
-      // Only include conditions the user explicitly confirmed (step 3 form).
-      // Doc-extracted conditions (userConfirmed=false) must not pollute this step.
       const userCodes = (profileData.conditions ?? [])
         .filter((c: any) => c.userConfirmed)
         .map((c: any) => c.conditionCode)
-      // riskLevel is set when step 3 is submitted — use it to distinguish
-      // "user said none" (riskLevel set, userCodes=[]) from "step 3 not done yet" (riskLevel null)
-      if (p.riskLevel == null) return undefined
       return { conditionCodes: userCodes }
     }
     if (step === 5) return {
@@ -217,7 +217,7 @@ function OnboardingStepInner({ step }: { step: number }) {
               {step === 1 && <DemographicsStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
               {step === 2 && <GoalsStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
               {step === 3 && <MedicalContextStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
-              {step === 4 && <DocUploadStep onSubmit={d => saveStep(d)} loading={loading} onSkip={handleSkip} onSaveOnly={fromProfile ? () => router.push('/profile') : undefined} />}
+              {step === 4 && <DocUploadStep onSubmit={d => saveStep(d)} loading={loading} onSkip={handleSkip} onSaveOnly={fromProfile ? () => router.push('/profile') : undefined} existingDocs={existingDocs} />}
               {step === 5 && <DietaryPrefsStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
               {step === 6 && <LocationStep onSubmit={d => saveStep(d)} onSaveOnly={fromProfile ? d => saveStep(d, true) : undefined} loading={loading} initialData={initialData} />}
             </>

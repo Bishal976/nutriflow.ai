@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 interface Props {
   onSubmit: (data: object) => void
@@ -24,6 +24,9 @@ export default function DemographicsStep({ onSubmit, onSaveOnly, loading, initia
     weightKg: initialData?.weightKg ? String(initialData.weightKg) : '',
     activityLevel: initialData?.activityLevel ?? '',
   })
+  const initialSnapshot = useRef(JSON.stringify(form))
+  const isDirty = JSON.stringify(form) !== initialSnapshot.current
+
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
 
   function buildData() {
@@ -89,7 +92,7 @@ export default function DemographicsStep({ onSubmit, onSaveOnly, loading, initia
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
         {onSaveOnly && (
-          <button type="button" className="btn-secondary" disabled={loading}
+          <button type="button" className="btn-secondary" disabled={loading || !isDirty}
             onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
             Save & return to profile
           </button>

@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 
 interface Props {
   onSubmit: (data: object) => void
@@ -31,6 +31,12 @@ export default function GoalsStep({ onSubmit, onSaveOnly, loading, initialData }
   const [targetWeight, setTargetWeight] = useState(
     initialData?.targetWeightKg ? String(initialData.targetWeightKg) : ''
   )
+  const initialGoals = useRef((() => {
+    if (!initialData?.primaryGoal) return []
+    return [initialData.primaryGoal, ...(initialData.secondaryGoals ?? [])]
+  })())
+  const initialTW = useRef(initialData?.targetWeightKg ? String(initialData.targetWeightKg) : '')
+  const isDirty = goals.join(',') !== initialGoals.current.join(',') || targetWeight !== initialTW.current
 
   function toggle(value: string) {
     setGoals(prev => {
@@ -100,7 +106,7 @@ export default function GoalsStep({ onSubmit, onSaveOnly, loading, initialData }
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
         {onSaveOnly && (
-          <button type="button" className="btn-secondary" disabled={goals.length === 0 || loading}
+          <button type="button" className="btn-secondary" disabled={goals.length === 0 || loading || !isDirty}
             onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
             Save & return to profile
           </button>
