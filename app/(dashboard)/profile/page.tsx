@@ -58,6 +58,8 @@ export default function ProfilePage() {
   const [addingCondition, setAddingCondition] = useState(false)
   const [conditionSearch, setConditionSearch] = useState('')
   const [customCondition, setCustomCondition] = useState('')
+  const [addingConditionCode, setAddingConditionCode] = useState<string | null>(null)
+  const [removingIds, setRemovingIds] = useState<Set<string>>(new Set())
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [currentPw, setCurrentPw] = useState('')
   const [newPw, setNewPw] = useState('')
@@ -122,32 +124,38 @@ export default function ProfilePage() {
 
   async function addCondition(code: string, label: string) {
     if (conditions.find(c => c.conditionCode === code)) { toast('Already added', 'error'); return }
-    const res = await fetch('/api/profile/conditions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conditionCode: code, conditionLabel: label }),
-    })
-    if (res.ok) {
-      const d = await res.json()
-      setConditions(prev => [...prev, d.condition])
-      setProfile(prev => prev ? { ...prev, riskLevel: d.riskLevel } : prev)
-      setAddingCondition(false)
-      setConditionSearch('')
-      setCustomCondition('')
-      toast('Condition added')
-    } else { toast('Failed to add condition', 'error') }
+    setAddingConditionCode(code)
+    try {
+      const res = await fetch('/api/profile/conditions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conditionCode: code, conditionLabel: label }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setConditions(prev => [...prev, d.condition])
+        setProfile(prev => prev ? { ...prev, riskLevel: d.riskLevel } : prev)
+        setAddingCondition(false)
+        setConditionSearch('')
+        setCustomCondition('')
+        toast('Condition added')
+      } else { toast('Failed to add condition', 'error') }
+    } finally { setAddingConditionCode(null) }
   }
 
   async function removeCondition(id: string) {
-    const res = await fetch('/api/profile/conditions', {
-      method: 'DELETE', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ conditionId: id }),
-    })
-    if (res.ok) {
-      const d = await res.json()
-      setConditions(prev => prev.filter(c => c.id !== id))
-      setProfile(prev => prev ? { ...prev, riskLevel: d.riskLevel } : prev)
-      toast('Condition removed')
-    } else { toast('Failed to remove', 'error') }
+    setRemovingIds(prev => new Set(prev).add(id))
+    try {
+      const res = await fetch('/api/profile/conditions', {
+        method: 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ conditionId: id }),
+      })
+      if (res.ok) {
+        const d = await res.json()
+        setConditions(prev => prev.filter(c => c.id !== id))
+        setProfile(prev => prev ? { ...prev, riskLevel: d.riskLevel } : prev)
+        toast('Condition removed')
+      } else { toast('Failed to remove', 'error') }
+    } finally { setRemovingIds(prev => { const s = new Set(prev); s.delete(id); return s }) }
   }
 
   const riskColors: Record<string, string> = { LOW: '#4CAF7D', MODERATE: '#F5A623', HIGH: '#E8943A', CRITICAL: '#E05A5A' }
@@ -299,9 +307,15 @@ export default function ProfilePage() {
           {conditions.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               {conditions.map(c => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'rgba(224,90,90,0.08)', border: '1.5px solid rgba(224,90,90,0.3)', fontSize: 13, fontWeight: 600, color: 'var(--error)' }}>
+                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'rgba(224,90,90,0.08)', border: '1.5px solid rgba(224,90,90,0.3)', fontSize: 13, fontWeight: 600, color: 'var(--error)', opacity: removingIds.has(c.id) ? 0.5 : 1 }}>
                   {c.conditionLabel}
-                  <button onClick={() => removeCondition(c.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 0, lineHeight: 1, fontSize: 14, fontWeight: 700 }}>×</button>
+                  <button
+                    onClick={() => removeCondition(c.id)}
+                    disabled={removingIds.has(c.id)}
+                    style={{ background: 'none', border: 'none', cursor: removingIds.has(c.id) ? 'default' : 'pointer', color: 'var(--error)', padding: 0, lineHeight: 1, fontSize: 14, fontWeight: 700 }}
+                  >
+                    {removingIds.has(c.id) ? '…' : '×'}
+                  </button>
                 </div>
               ))}
             </div>
@@ -320,16 +334,18 @@ export default function ProfilePage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 200, overflowY: 'auto', marginBottom: 10 }}>
                 {filteredConditions.map(c => (
                   <button key={c.code} onClick={() => addCondition(c.code, c.label)}
-                    style={{ padding: '8px 12px', background: 'var(--surface-2)', border: 'none', borderRadius: 8, fontSize: 14, color: 'var(--text)', cursor: 'pointer', textAlign: 'left', fontWeight: 500 }}>
-                    {c.label}
+                    disabled={!!addingConditionCode}
+                    style={{ padding: '8px 12px', background: 'var(--surface-2)', border: 'none', borderRadius: 8, fontSize: 14, color: 'var(--text)', cursor: addingConditionCode ? 'default' : 'pointer', textAlign: 'left', fontWeight: 500, opacity: addingConditionCode && addingConditionCode !== c.code ? 0.5 : 1 }}>
+                    {addingConditionCode === c.code ? 'Adding…' : c.label}
                   </button>
                 ))}
                 {filteredConditions.length === 0 && conditionSearch && (
                   <div style={{ padding: '6px 0' }}>
                     <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>Not in list? Add &quot;{conditionSearch}&quot; as custom:</p>
                     <button onClick={() => addCondition(conditionSearch.toLowerCase().replace(/\s+/g, '_'), conditionSearch)}
-                      className="btn-secondary" style={{ fontSize: 12, padding: '6px 14px' }}>
-                      + Add &quot;{conditionSearch}&quot;
+                      disabled={!!addingConditionCode}
+                      className="btn-secondary" style={{ fontSize: 12, padding: '6px 14px', opacity: addingConditionCode ? 0.6 : 1 }}>
+                      {addingConditionCode ? 'Adding…' : `+ Add "${conditionSearch}"`}
                     </button>
                   </div>
                 )}
