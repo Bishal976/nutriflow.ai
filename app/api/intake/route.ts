@@ -8,7 +8,7 @@ import {
 } from '@/lib/nutrition/engine'
 import { fetchWeatherByCity } from '@/lib/weather/client'
 import { encryptFieldNullable } from '@/lib/crypto/field-encryption'
-import { eq } from 'drizzle-orm'
+import { eq, and, gte, desc } from 'drizzle-orm'
 import type { IntakeRequest, IntakeResponse } from '@/types/api'
 
 export async function POST(req: NextRequest) {
@@ -51,8 +51,10 @@ export async function POST(req: NextRequest) {
 
     if (step === 3) {
       const d = data as import('@/types/api').MedicalContextPayload
-      // Delete old conditions then re-insert
-      await db.delete(medicalConditions).where(eq(medicalConditions.userId, session.userId))
+      // Only delete user-confirmed conditions so doc-extracted ones (userConfirmed=false) are preserved
+      await db.delete(medicalConditions).where(
+        and(eq(medicalConditions.userId, session.userId), eq(medicalConditions.userConfirmed, true))
+      )
       if (d.conditions.length > 0) {
         await db.insert(medicalConditions).values(
           d.conditions.map(c => ({
@@ -118,9 +120,8 @@ export async function POST(req: NextRequest) {
         : { ...macros, ...micros, waterMl: 2500 }
 
       const today = new Date(); today.setHours(0, 0, 0, 0)
-      await db.insert(nutritionTargets).values({
-        userId: session.userId,
-        date: today,
+
+      const targetData = {
         targetCalories: targets.calories,
         targetProteinG: targets.proteinG,
         targetCarbsG: targets.carbsG,
@@ -135,7 +136,18 @@ export async function POST(req: NextRequest) {
         weatherContext: weather ? { ...weatherData } : null,
         tdeeKcal: tdee,
         bmrKcal: bmr,
-      }).onConflictDoNothing()
+      }
+
+      const existingTarget = await db.query.nutritionTargets.findFirst({
+        where: and(eq(nutritionTargets.userId, session.userId), gte(nutritionTargets.date, today)),
+        orderBy: [desc(nutritionTargets.createdAt)],
+      })
+
+      if (existingTarget) {
+        await db.update(nutritionTargets).set(targetData).where(eq(nutritionTargets.id, existingTarget.id))
+      } else {
+        await db.insert(nutritionTargets).values({ userId: session.userId, date: today, ...targetData })
+      }
 
       // Mark onboarding complete
       await db.update(users).set({ onboardingComplete: true }).where(eq(users.id, session.userId))

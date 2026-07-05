@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
       mealType: string
       dailyLogId: string
       items: ManualFoodItem[]
+      rebalance?: boolean
     }
 
     if (!body.dailyLogId) return NextResponse.json({ error: 'dailyLogId required' }, { status: 400 })
@@ -139,14 +140,16 @@ export async function POST(req: NextRequest) {
       rebalanceExplanation: null,
     })
 
-    if (remainingSlots.length === 0) {
+    if (!body.rebalance || remainingSlots.length === 0) {
       return NextResponse.json({
         success: true,
         mealLogId: mealLog.id,
         totalCalories: Math.round(totalCal),
         deviation: { deltaCalories, severity: computeDeviationSeverity(deltaCalories) },
         rebalancedMeals: [],
-        explanation: "All meals logged for today. Great job staying consistent!",
+        explanation: remainingSlots.length === 0
+          ? "All meals logged for today. Great job staying consistent!"
+          : "Meal logged.",
       })
     }
 

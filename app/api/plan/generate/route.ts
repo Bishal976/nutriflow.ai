@@ -191,21 +191,23 @@ export async function GET(req: NextRequest) {
       ? { ...plan as object, _regenerated: true }
       : plan
 
-    // Upsert daily log with cached plan
-    await db.insert(dailyLogs).values({
-      userId: session.userId,
-      date: todayUTC,
-      nutritionTargetId: target.id,
-      planData: planToStore as any,
-      planInputHash: currentInputHash,
-      weatherContext: target.weatherContext as any,
-    }).onConflictDoNothing()
-
-    // If conflict (log already exists), update it with new plan
+    // Always branch explicitly: update existing log or create new one.
+    // Never blindly insert — without a real DB unique constraint on (userId, date),
+    // onConflictDoNothing never fires and every regeneration creates a duplicate
+    // empty row, hiding meal logs that belong to the original daily log.
     if (existingLog) {
       await db.update(dailyLogs)
-        .set({ planData: planToStore as any, planInputHash: currentInputHash, updatedAt: new Date() })
+        .set({ planData: planToStore as any, planInputHash: currentInputHash, nutritionTargetId: target.id, updatedAt: new Date() })
         .where(eq(dailyLogs.id, existingLog.id))
+    } else {
+      await db.insert(dailyLogs).values({
+        userId: session.userId,
+        date: todayUTC,
+        nutritionTargetId: target.id,
+        planData: planToStore as any,
+        planInputHash: currentInputHash,
+        weatherContext: target.weatherContext as any,
+      })
     }
 
     const dailyLog = await db.query.dailyLogs.findFirst({

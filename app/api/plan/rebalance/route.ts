@@ -69,13 +69,42 @@ export async function POST(req: NextRequest) {
     const conditions = await db.query.medicalConditions.findMany({ where: eq(medicalConditions.userId, session.userId) })
     const conditionCodes = conditions.map(c => c.conditionCode)
 
-    if (remainingSlots.length === 0) {
-      const delta = thisCalories + (consumed.calories) - target.targetCalories
+    const deltaCalories = (consumed.calories + thisCalories) - target.targetCalories
+    const deltaProteinG = (consumed.proteinG + thisProtein) - target.targetProteinG
+    const deltaCarbsG = (consumed.carbsG + thisCarbs) - target.targetCarbsG
+    const deltaFatG = (consumed.fatG + thisFat) - target.targetFatG
+
+    // Shared: persist confirmed foods + update actuals regardless of rebalance flag
+    await db.update(mealLogs).set({
+      foodItems: body.confirmedFoods as any,
+      estimatedCalories: Math.round(thisCalories),
+      estimatedProteinG: Math.round(thisProtein * 10) / 10,
+      estimatedCarbsG: Math.round(thisCarbs * 10) / 10,
+      estimatedFatG: Math.round(thisFat * 10) / 10,
+      userConfirmed: true,
+    }).where(eq(mealLogs.id, body.mealLogId))
+
+    await db.update(dailyLogs).set({
+      actualCalories: (dailyLog.actualCalories ?? 0) + thisCalories,
+      actualProteinG: (dailyLog.actualProteinG ?? 0) + thisProtein,
+      actualCarbsG: (dailyLog.actualCarbsG ?? 0) + thisCarbs,
+      actualFatG: (dailyLog.actualFatG ?? 0) + thisFat,
+      updatedAt: new Date(),
+    }).where(eq(dailyLogs.id, body.dailyLogId))
+
+    if (body.skipRebalance || remainingSlots.length === 0) {
+      await db.insert(deviations).values({
+        dailyLogId: body.dailyLogId, mealLogId: body.mealLogId,
+        deltaCalories, deltaProteinG, deltaCarbsG, deltaFatG,
+        rebalancedMeals: [], rebalanceExplanation: null,
+      })
       return NextResponse.json({
         success: true,
-        deviation: { deltaCalories: delta, deltaProteinG: 0, deltaCarbsG: 0, deltaFatG: 0, severity: computeDeviationSeverity(delta) },
+        deviation: { deltaCalories, deltaProteinG, deltaCarbsG, deltaFatG, severity: computeDeviationSeverity(deltaCalories) },
         rebalancedMeals: [],
-        explanation: "You've logged all meals for today. Great job staying consistent!",
+        explanation: remainingSlots.length === 0
+          ? "You've logged all meals for today. Great job staying consistent!"
+          : "Meal logged. Your remaining meals are unchanged.",
         complianceNote: null,
       } as RebalanceResponse)
     }
@@ -90,47 +119,16 @@ export async function POST(req: NextRequest) {
       conditionRestrictions: conditionToRestrictions(conditionCodes),
     })
 
-    // Persist deviation record
-    const deltaCalories = (consumed.calories + thisCalories) - target.targetCalories
     await db.insert(deviations).values({
-      dailyLogId: body.dailyLogId,
-      mealLogId: body.mealLogId,
-      deltaCalories,
-      deltaProteinG: (consumed.proteinG + thisProtein) - target.targetProteinG,
-      deltaCarbsG: (consumed.carbsG + thisCarbs) - target.targetCarbsG,
-      deltaFatG: (consumed.fatG + thisFat) - target.targetFatG,
+      dailyLogId: body.dailyLogId, mealLogId: body.mealLogId,
+      deltaCalories, deltaProteinG, deltaCarbsG, deltaFatG,
       rebalancedMeals: result.rebalanced_meals,
       rebalanceExplanation: result.explanation,
     })
 
-    // Persist confirmed food items + macros to the meal log
-    await db.update(mealLogs).set({
-      foodItems: body.confirmedFoods as any,
-      estimatedCalories: Math.round(thisCalories),
-      estimatedProteinG: Math.round(thisProtein * 10) / 10,
-      estimatedCarbsG: Math.round(thisCarbs * 10) / 10,
-      estimatedFatG: Math.round(thisFat * 10) / 10,
-      userConfirmed: true,
-    }).where(eq(mealLogs.id, body.mealLogId))
-
-    // Update daily log actuals
-    await db.update(dailyLogs).set({
-      actualCalories: (dailyLog.actualCalories ?? 0) + thisCalories,
-      actualProteinG: (dailyLog.actualProteinG ?? 0) + thisProtein,
-      actualCarbsG: (dailyLog.actualCarbsG ?? 0) + thisCarbs,
-      actualFatG: (dailyLog.actualFatG ?? 0) + thisFat,
-      updatedAt: new Date(),
-    }).where(eq(dailyLogs.id, body.dailyLogId))
-
     return NextResponse.json({
       success: true,
-      deviation: {
-        deltaCalories,
-        deltaProteinG: (consumed.proteinG + thisProtein) - target.targetProteinG,
-        deltaCarbsG: (consumed.carbsG + thisCarbs) - target.targetCarbsG,
-        deltaFatG: (consumed.fatG + thisFat) - target.targetFatG,
-        severity: computeDeviationSeverity(deltaCalories),
-      },
+      deviation: { deltaCalories, deltaProteinG, deltaCarbsG, deltaFatG, severity: computeDeviationSeverity(deltaCalories) },
       rebalancedMeals: result.rebalanced_meals.map(m => ({
         mealType: m.meal_type,
         items: m.items.map(i => ({ name: i.name, quantity: i.quantity, calories: i.calories, proteinG: i.protein_g, carbsG: i.carbs_g, fatG: i.fat_g })),

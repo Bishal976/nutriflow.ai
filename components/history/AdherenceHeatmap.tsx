@@ -62,8 +62,8 @@ export default function AdherenceHeatmap({ summary }: { summary: DaySummary[] })
   })
 
   return (
-    <div style={{ overflowX: 'auto', paddingBottom: 2 }}>
-      <div style={{ display: 'inline-flex', flexDirection: 'column', gap: 6, minWidth: weeks.length * (CELL + GAP) + 28 }}>
+    <div style={{ overflowX: 'auto', paddingBottom: 2, width: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: weeks.length * (CELL + GAP) + 28 }}>
         <div style={{ position: 'relative', height: 14, marginLeft: 28 }}>
           {monthLabels.map(({ weekIdx, label }) => (
             <span key={weekIdx} style={{ position: 'absolute', left: weekIdx * (CELL + GAP), fontSize: 10, color: 'var(--text-muted)', fontWeight: 600 }}>{label}</span>

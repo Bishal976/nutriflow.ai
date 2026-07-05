@@ -35,6 +35,7 @@ function VisionResultInner({ jobId }: { jobId: string }) {
   const [foods, setFoods] = useState<FoodItem[]>([])
   const [confirming, setConfirming] = useState(false)
   const [rebalance, setRebalance] = useState<RebalanceResponse | null>(null)
+  const [wantRebalance, setWantRebalance] = useState(false)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -78,7 +79,7 @@ function VisionResultInner({ jobId }: { jobId: string }) {
 
       const res = await fetch('/api/plan/rebalance', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dailyLogId: planData?.dailyLogId, mealLogId, confirmedFoods: foods }),
+        body: JSON.stringify({ dailyLogId: planData?.dailyLogId, mealLogId, confirmedFoods: foods, skipRebalance: !wantRebalance }),
       })
       const data: RebalanceResponse = await res.json()
       if (!res.ok) { setError((data as any).error ?? 'Failed to rebalance'); return }
@@ -259,10 +260,21 @@ function VisionResultInner({ jobId }: { jobId: string }) {
         </div>
       </div>
 
+      {/* Rebalance opt-in */}
+      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${wantRebalance ? 'var(--primary)' : 'var(--border)'}`, background: wantRebalance ? 'rgba(45,125,125,0.05)' : 'var(--surface)', transition: 'all 0.12s' }}>
+        <input type="checkbox" checked={wantRebalance} onChange={e => setWantRebalance(e.target.checked)} style={{ accentColor: 'var(--primary)', marginTop: 2, flexShrink: 0 }} />
+        <div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Rebalance my remaining meals</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>Adjust upcoming meal suggestions to compensate for this meal. Useful when logging in real-time; skip if logging retrospectively.</div>
+        </div>
+      </label>
+
       {error && <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--error)' }}>{error}</div>}
 
       <button className="btn-primary" onClick={handleConfirm} disabled={confirming || foods.length === 0} style={{ padding: '14px', fontSize: 15 }}>
-        {confirming ? 'Calculating rebalance…' : '✓ Confirm & rebalance my day'}
+        {confirming
+          ? (wantRebalance ? 'Calculating rebalance…' : 'Confirming…')
+          : (wantRebalance ? '✓ Confirm & rebalance my day' : '✓ Confirm meal')}
       </button>
 
       <p style={{ fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5 }}>

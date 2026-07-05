@@ -27,7 +27,7 @@ function ManualResult({ result, onLogAnother }: {
       <div style={{ textAlign: 'center', padding: '20px 0' }}>
         <div style={{ fontSize: 44, marginBottom: 8 }}>✅</div>
         <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', margin: 0 }}>Meal logged!</h2>
-        <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>{result.totalCalories} kcal logged · Your remaining day has been adjusted.</p>
+        <p style={{ fontSize: 14, color: 'var(--text-muted)', marginTop: 4 }}>{result.totalCalories} kcal logged{result.rebalancedMeals.length > 0 ? ' · Your remaining day has been adjusted.' : '.'}</p>
       </div>
 
       {result.explanation && (
@@ -86,6 +86,7 @@ export default function LogMealPage() {
   const [manualLoading, setManualLoading] = useState(false)
   const [manualError, setManualError] = useState('')
   const [manualResult, setManualResult] = useState<any>(null)
+  const [wantRebalance, setWantRebalance] = useState(false)
 
   // Upgrade modal
   const [upgradeOpen, setUpgradeOpen] = useState(false)
@@ -183,6 +184,7 @@ export default function LogMealPage() {
         body: JSON.stringify({
           mealType,
           dailyLogId: planData.dailyLogId,
+          rebalance: wantRebalance,
           items: validRows.map(r => ({
             name: r.name.trim(),
             quantity: r.quantity.trim() || '1 serving',
@@ -369,6 +371,15 @@ export default function LogMealPage() {
                 <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--primary)' }}>{Math.round(totalCal)} kcal</span>
               </div>
             )}
+
+            {/* Rebalance opt-in */}
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, cursor: 'pointer', padding: '10px 14px', borderRadius: 10, border: `1.5px solid ${wantRebalance ? 'var(--primary)' : 'var(--border)'}`, background: wantRebalance ? 'rgba(45,125,125,0.05)' : 'var(--surface)', transition: 'all 0.12s' }}>
+              <input type="checkbox" checked={wantRebalance} onChange={e => setWantRebalance(e.target.checked)} style={{ accentColor: 'var(--primary)', marginTop: 2, flexShrink: 0 }} />
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>Rebalance my remaining meals</div>
+                <div style={{ fontSize: 12, color: 'var(--text-muted)', lineHeight: 1.5, marginTop: 2 }}>NutriFlow will adjust your upcoming meal suggestions to compensate for what you logged. Useful when logging in real-time, not needed if logging after the fact.</div>
+              </div>
+            </label>
 
             {manualError && (
               <div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 8, padding: '10px 14px', fontSize: 14, color: 'var(--error)' }}>

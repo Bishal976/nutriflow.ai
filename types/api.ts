@@ -46,7 +46,7 @@ export interface VisionAnalysisResult {
 
 export interface VisionStatusResponse { jobId: string; status: JobStatus; result?: VisionAnalysisResult; error?: string }
 
-export interface RebalanceRequest { dailyLogId: string; mealLogId: string; confirmedFoods: FoodItem[] }
+export interface RebalanceRequest { dailyLogId: string; mealLogId: string; confirmedFoods: FoodItem[]; skipRebalance?: boolean }
 
 export interface RebalancedMeal {
   mealType: string
