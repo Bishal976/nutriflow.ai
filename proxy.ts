@@ -27,6 +27,10 @@ export async function proxy(req: NextRequest) {
   const session = await getSessionFromRequest(req)
 
   if (!session) {
+    // API routes: return 401 JSON so JS clients get a parseable error, not a redirect
+    if (pathname.startsWith('/api/')) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     return NextResponse.redirect(new URL('/login', req.url))
   }
 

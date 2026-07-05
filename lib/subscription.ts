@@ -5,6 +5,11 @@ import { eq, and, gte, sql } from 'drizzle-orm'
 export const FREE_LIMITS = {
   dailyMealLogs: 3,
   historyDays: 7,
+  medicalDocuments: 1,
+}
+
+export const PRO_LIMITS = {
+  medicalDocuments: 20,
 }
 
 export type Plan = 'free' | 'pro'

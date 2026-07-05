@@ -1,5 +1,6 @@
 'use client'
 import { useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface Props { onSubmit: (data: object) => void; loading: boolean; onSkip: () => void; onSaveOnly?: () => void }
 
@@ -21,9 +22,11 @@ interface UploadItem {
 }
 
 export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly }: Props) {
+  const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
   const [items, setItems] = useState<UploadItem[]>([])
   const [dropError, setDropError] = useState('')
+  const [hitUpgradeLimit, setHitUpgradeLimit] = useState(false)
 
   const isUploading = items.some(i => i.state === 'uploading')
   const hasSuccess = items.some(i => i.state === 'done')
@@ -55,6 +58,12 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly }:
     try {
       const res = await fetch('/api/documents/upload', { method: 'POST', body: form })
       const data = await res.json()
+      if (res.status === 402 && data.upgrade) {
+        // Remove the pending item and show upgrade CTA
+        setItems(prev => prev.filter(i => i.id !== id))
+        setHitUpgradeLimit(true)
+        return
+      }
       if (!res.ok && res.status !== 207) throw new Error(data.error || 'Upload failed')
       updateItem(id, { state: 'done', extracted: data.extracted ?? undefined })
     } catch (e) {
@@ -99,28 +108,49 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly }:
         </div>
       )}
 
-      {/* Drop zone — always shown, disabled while uploading */}
-      <div
-        onClick={() => !isUploading && inputRef.current?.click()}
-        onDrop={handleDrop}
-        onDragOver={e => e.preventDefault()}
-        style={{
-          border: `2px dashed ${isUploading ? 'var(--border)' : dropError ? '#e05252' : 'var(--border)'}`,
-          borderRadius: 12, padding: hasSuccess ? '20px 24px' : '40px 24px',
-          textAlign: 'center', cursor: isUploading ? 'default' : 'pointer',
-          background: 'var(--surface)', transition: 'border-color 0.15s',
-          opacity: isUploading ? 0.5 : 1,
-        }}
-      >
-        <div style={{ fontSize: hasSuccess ? 24 : 36, marginBottom: 8 }}>📄</div>
-        <p style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4, fontSize: hasSuccess ? 13 : 15 }}>
-          {hasSuccess ? 'Upload another document' : 'Upload prescription or lab report'}
-        </p>
-        {!hasSuccess && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>PDF, JPG, or PNG — max 10MB</p>}
-        <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-          {isUploading ? 'Processing current file…' : 'Click or drag & drop'}
-        </p>
-      </div>
+      {/* Upgrade banner — shown when free user hits the 1-doc limit */}
+      {hitUpgradeLimit ? (
+        <div style={{ borderRadius: 14, overflow: 'hidden', border: '1.5px solid rgba(45,125,125,0.3)' }}>
+          <div style={{ background: 'rgba(45,125,125,0.07)', padding: '20px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>⚡</div>
+            <p style={{ fontWeight: 700, color: 'var(--text)', fontSize: 15, marginBottom: 6 }}>Upload unlimited reports with Pro</p>
+            <p style={{ fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.5, marginBottom: 16 }}>
+              Free plan includes 1 medical report. Upgrade to upload all your prescriptions and lab reports for personalised targets.
+            </p>
+            <button
+              className="btn-primary"
+              onClick={() => router.push('/upgrade?reason=medical_documents')}
+              style={{ width: '100%', padding: '12px', fontSize: 14 }}
+            >
+              Upgrade to Pro →
+            </button>
+          </div>
+        </div>
+      ) : (
+        /* Drop zone — shown when not at upgrade limit */
+        <div
+          onClick={() => !isUploading && inputRef.current?.click()}
+          onDrop={handleDrop}
+          onDragOver={e => e.preventDefault()}
+          style={{
+            border: `2px dashed ${isUploading ? 'var(--border)' : dropError ? '#e05252' : 'var(--border)'}`,
+            borderRadius: 12, padding: hasSuccess ? '20px 24px' : '40px 24px',
+            textAlign: 'center', cursor: isUploading ? 'default' : 'pointer',
+            background: 'var(--surface)', transition: 'border-color 0.15s',
+            opacity: isUploading ? 0.5 : 1,
+          }}
+        >
+          <div style={{ fontSize: hasSuccess ? 24 : 36, marginBottom: 8 }}>📄</div>
+          <p style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 4, fontSize: hasSuccess ? 13 : 15 }}>
+            {hasSuccess ? 'Upload another document' : 'Upload prescription or lab report'}
+          </p>
+          {!hasSuccess && <p style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>PDF, JPG, or PNG — max 10MB</p>}
+          {hasSuccess && <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 4 }}>Free plan: 1 report included</p>}
+          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+            {isUploading ? 'Processing current file…' : 'Click or drag & drop'}
+          </p>
+        </div>
+      )}
 
       {dropError && (
         <div style={{ background: 'rgba(220,80,80,0.08)', border: '1px solid rgba(220,80,80,0.25)', borderRadius: 8, padding: '10px 14px', fontSize: 13, color: '#a33' }}>

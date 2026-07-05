@@ -35,6 +35,10 @@ export async function POST(req: NextRequest) {
     })
     if (!target) return NextResponse.json({ error: 'No nutrition targets found. Please complete onboarding first.' }, { status: 404 })
 
+    if (!Array.isArray(body.confirmedFoods)) {
+      return NextResponse.json({ error: 'confirmedFoods must be an array' }, { status: 400 })
+    }
+
     // Compute total consumed so far (including this meal)
     const thisCalories = body.confirmedFoods.reduce((s, f) => s + f.caloriesEstimate, 0)
     const thisProtein = body.confirmedFoods.reduce((s, f) => s + f.proteinG, 0)

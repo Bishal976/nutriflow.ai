@@ -52,9 +52,10 @@ export async function GET(req: NextRequest) {
 
   try {
     const userPlan = await getUserPlan(session.userId)
-    if (userPlan === 'free' && (forceRegenerate || hint)) {
+    // Custom hints are always Pro-only
+    if (userPlan === 'free' && hint) {
       return upgradeRequired('plan_regeneration',
-        'Plan regeneration and custom hints are a Pro feature. Upgrade to rebuild your plan anytime.')
+        'Custom hints are a Pro feature. Upgrade to guide your plan with specific requests.')
     }
     const target = await db.query.nutritionTargets.findFirst({
       where: eq(nutritionTargets.userId, session.userId),
@@ -102,6 +103,15 @@ export async function GET(req: NextRequest) {
     // That invalidation is automatic and free — it's a correctness fix, not a
     // user-requested regeneration, so it bypasses the Pro-only regenerate gate.
     const inputChanged = !!existingLog?.planInputHash && existingLog.planInputHash !== currentInputHash
+
+    // Free users get 1 manual regen per day (tracked via _regenerated flag in planData)
+    if (userPlan === 'free' && forceRegenerate) {
+      const alreadyRegenerated = !!(existingLog?.planData as any)?._regenerated
+      if (alreadyRegenerated) {
+        return upgradeRequired('plan_regeneration',
+          'Free plan includes 1 plan refresh per day. Upgrade to Pro for unlimited regenerations and custom hints.')
+      }
+    }
 
     if (existingLog?.planData && !forceRegenerate && !inputChanged) {
       // Merge rebalanced meals from latest deviation so dashboard reflects post-log adjustments
@@ -176,12 +186,17 @@ export async function GET(req: NextRequest) {
       userHint: hint,
     })
 
+    // Mark regenerated plans from free users so we can gate the 2nd regen
+    const planToStore = (userPlan === 'free' && forceRegenerate)
+      ? { ...plan as object, _regenerated: true }
+      : plan
+
     // Upsert daily log with cached plan
     await db.insert(dailyLogs).values({
       userId: session.userId,
       date: todayUTC,
       nutritionTargetId: target.id,
-      planData: plan as any,
+      planData: planToStore as any,
       planInputHash: currentInputHash,
       weatherContext: target.weatherContext as any,
     }).onConflictDoNothing()
@@ -189,7 +204,7 @@ export async function GET(req: NextRequest) {
     // If conflict (log already exists), update it with new plan
     if (existingLog) {
       await db.update(dailyLogs)
-        .set({ planData: plan as any, planInputHash: currentInputHash, updatedAt: new Date() })
+        .set({ planData: planToStore as any, planInputHash: currentInputHash, updatedAt: new Date() })
         .where(eq(dailyLogs.id, existingLog.id))
     }
 

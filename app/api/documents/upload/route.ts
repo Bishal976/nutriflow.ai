@@ -6,6 +6,7 @@ import { medicalDocuments, medicalConditions, profiles } from '@/db/schema'
 import { classifyRisk } from '@/lib/nutrition/engine'
 import { extractMedicalDocument } from '@/lib/ai/document-extractor'
 import { eq, and, sql } from 'drizzle-orm'
+import { getUserPlan, FREE_LIMITS, PRO_LIMITS, upgradeRequired } from '@/lib/subscription'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
 type AllowedType = typeof ALLOWED_TYPES[number]
@@ -14,19 +15,25 @@ function isAllowedType(t: string): t is AllowedType {
   return (ALLOWED_TYPES as readonly string[]).includes(t)
 }
 
-const MAX_DOCS_PER_USER = 20
-
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Enforce per-user document limit
-  const existingDocCount = await db.select({ id: medicalDocuments.id })
+  // Enforce per-user document limit based on plan
+  const userPlan = await getUserPlan(session.userId)
+  const maxDocs = userPlan === 'pro' ? PRO_LIMITS.medicalDocuments : FREE_LIMITS.medicalDocuments
+
+  const existingDocs = await db.select({ id: medicalDocuments.id })
     .from(medicalDocuments)
     .where(eq(medicalDocuments.userId, session.userId))
-    .limit(MAX_DOCS_PER_USER + 1)
-  if (existingDocCount.length >= MAX_DOCS_PER_USER) {
-    return NextResponse.json({ error: `Document limit reached (${MAX_DOCS_PER_USER} max). Please contact support.` }, { status: 400 })
+    .limit(maxDocs + 1)
+
+  if (existingDocs.length >= maxDocs) {
+    if (userPlan === 'free') {
+      return upgradeRequired('medical_documents',
+        'Free plan includes 1 medical report. Upgrade to Pro to upload unlimited reports and get condition-aware meal targets.')
+    }
+    return NextResponse.json({ error: `Document limit reached (${maxDocs} max).` }, { status: 400 })
   }
 
   const formData = await req.formData()
