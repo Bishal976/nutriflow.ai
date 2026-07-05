@@ -242,8 +242,8 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly, e
 
       <div style={{ display: 'flex', gap: 10 }}>
         {onSaveOnly && (
-          <button className="btn-secondary" onClick={onSaveOnly} style={{ flex: 1 }}>
-            Back to profile
+          <button className="btn-secondary" onClick={onSaveOnly} disabled={loading || isUploading} style={{ flex: 1 }}>
+            {loading ? <><span className="spinner" style={{ width: 12, height: 12, border: '1.5px solid rgba(0,0,0,0.15)', borderTopColor: 'var(--text)', borderRadius: '50%', display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }} />Saving…</> : 'Back to profile'}
           </button>
         )}
         <button className="btn-primary" onClick={onSkip} disabled={loading || isUploading} style={{ flex: 2 }}>

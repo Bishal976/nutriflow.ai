@@ -94,7 +94,7 @@ export default function DemographicsStep({ onSubmit, onSaveOnly, loading, initia
         {onSaveOnly && (
           <button type="button" className="btn-secondary" disabled={loading || !isDirty}
             onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
-            Save & return to profile
+            {loading ? <><span className="spinner" style={{ width: 12, height: 12, border: '1.5px solid rgba(0,0,0,0.15)', borderTopColor: 'var(--text)', borderRadius: '50%', display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }} />Saving…</> : 'Save & return to profile'}
           </button>
         )}
         <button className="btn-primary" type="submit" disabled={loading} style={{ flex: 2 }}>
