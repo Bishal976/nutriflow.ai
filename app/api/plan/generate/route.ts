@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createHash } from 'crypto'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
@@ -113,7 +113,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    if (existingLog?.planData && !forceRegenerate && !inputChanged) {
+    if (existingLog?.planData && !forceRegenerate) {
       // Merge rebalanced meals from latest deviation so dashboard reflects post-log adjustments
       const latestDeviation = await db.query.deviations.findFirst({
         where: eq(deviations.dailyLogId, existingLog.id),
@@ -147,7 +147,7 @@ export async function GET(req: NextRequest) {
         }
       }
 
-      return NextResponse.json({
+      const baseResponse = {
         plan: planData,
         target: {
           targetCalories: target.targetCalories,
@@ -168,7 +168,44 @@ export async function GET(req: NextRequest) {
         dailyLogId: existingLog.id,
         weatherContext: existingLog.weatherContext ?? target.weatherContext,
         cached: true,
-      })
+      }
+
+      // Stale-while-revalidate: inputs changed since last generation → return stale plan
+      // immediately so the user sees their content, then regenerate in the background.
+      if (inputChanged) {
+        const regenInput = { ...planInput }
+        const regenHash = currentInputHash
+        const logId = existingLog.id
+        const targetId = target.id
+        const isFree = userPlan === 'free'
+
+        after(async () => {
+          try {
+            const freshPlan = await generateDayPlan({
+              calories: regenInput.calories,
+              proteinG: regenInput.proteinG,
+              carbsG: regenInput.carbsG,
+              fatG: regenInput.fatG,
+              dietType: regenInput.dietType,
+              allergens: regenInput.allergens,
+              cuisinePrefs: regenInput.cuisinePrefs,
+              dislikedIngredients: regenInput.dislikedIngredients,
+              conditions: regenInput.conditionCodes,
+              waterMl: regenInput.waterMl,
+              weatherNote: regenInput.weatherNote,
+            })
+            await db.update(dailyLogs)
+              .set({ planData: freshPlan as any, planInputHash: regenHash, nutritionTargetId: targetId, updatedAt: new Date() })
+              .where(eq(dailyLogs.id, logId))
+          } catch (err) {
+            console.error('[plan/generate] background regen failed:', err)
+          }
+        })
+
+        return NextResponse.json({ ...baseResponse, stale: true })
+      }
+
+      return NextResponse.json(baseResponse)
     }
 
     const plan = await generateDayPlan({

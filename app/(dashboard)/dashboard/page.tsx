@@ -16,6 +16,7 @@ interface DashboardData {
   weatherContext: { tempC: number; condition: string; weatherAdjustmentNote?: string } | null
   dailyLogId?: string
   cached?: boolean
+  stale?: boolean
   planGeneratedAt?: string
 }
 
@@ -135,6 +136,7 @@ export default function DashboardPage() {
   const [hint, setHint] = useState('')
   const [showHint, setShowHint] = useState(false)
   const [upgradePrompt, setUpgradePrompt] = useState(false)
+  const [stale, setStale] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -143,11 +145,32 @@ export default function DashboardPage() {
       .then(r => r.json())
       .then(d => {
         if (d.error && !d.error.includes('onboarding')) { setError(d.error) }
-        else if (!d.error) { setData(d) }
+        else if (!d.error) { setData(d); setStale(!!d.stale) }
       })
       .catch(() => setError('Failed to load your plan.'))
       .finally(() => setLoading(false))
   }, [])
+
+  // Poll for the fresh plan while background regeneration is in progress.
+  // Stops as soon as the server returns a non-stale response (regen complete).
+  useEffect(() => {
+    if (!stale) return
+    let attempts = 0
+    const interval = setInterval(() => {
+      attempts++
+      if (attempts > 15) { setStale(false); clearInterval(interval); return } // give up after ~1 min
+      fetch('/api/plan/generate')
+        .then(r => r.json())
+        .then(d => {
+          if (!d.error && !d.upgrade && !d.stale) {
+            setData(d)
+            setStale(false)
+          }
+        })
+        .catch(() => {})
+    }, 4000)
+    return () => clearInterval(interval)
+  }, [stale])
 
   const today = new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -280,7 +303,7 @@ export default function DashboardPage() {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: 22, fontWeight: 700, color: 'var(--text)' }}>Today&apos;s Plan</h1>
-            {data?.cached && (
+            {data?.cached && !stale && (
               <span style={{ fontSize: 11, background: 'rgba(45,125,125,0.1)', color: 'var(--primary)', borderRadius: 6, padding: '2px 8px', fontWeight: 600 }}>
                 cached{planTime ? ` · ${planTime}` : ''}
               </span>
@@ -298,6 +321,14 @@ export default function DashboardPage() {
           <Link href="/log"><button className="btn-primary" style={{ fontSize: 14 }}>📸 Log a meal</button></Link>
         </div>
       </div>
+
+      {/* Stale plan banner — shown while background regeneration is running */}
+      {stale && (
+        <div style={{ background: 'rgba(45,125,125,0.07)', border: '1px solid rgba(45,125,125,0.2)', borderRadius: 10, padding: '10px 16px', display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span className="spinner" style={{ width: 14, height: 14, border: '2px solid rgba(45,125,125,0.2)', borderTopColor: 'var(--primary)', borderRadius: '50%', display: 'inline-block', flexShrink: 0 }} />
+          <span style={{ fontSize: 13, color: 'var(--primary)', fontWeight: 500 }}>Updating your plan based on your recent changes…</span>
+        </div>
+      )}
 
       {/* Hint panel — always accessible */}
       {showHint && (
