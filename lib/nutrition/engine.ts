@@ -79,11 +79,19 @@ export function classifyRisk(conditions: MedicalConditionCode[]): RiskLevel {
 }
 
 
+export interface MacroTargetOptions {
+  secondaryGoals?: Goal[]
+  currentWeightKg?: number
+  targetWeightKg?: number
+}
+
 export function computeMacroTargets(
   tdee: number,
   goal: Goal,
-  conditions: MedicalConditionCode[]
+  conditions: MedicalConditionCode[],
+  opts: MacroTargetOptions = {}
 ): MacroTargets {
+  const { secondaryGoals = [], currentWeightKg, targetWeightKg } = opts
   let calories = tdee
 
   // No calorie deficit for pregnancy or eating-disorder history — immutable code,
@@ -91,13 +99,25 @@ export function computeMacroTargets(
   const noDeficit = conditions.includes('pregnancy')
     || conditions.some(c => ['eating_disorder', 'anorexia', 'bulimia'].includes(c))
 
+  // Pace the deficit/surplus off the user's own target weight when given: close to
+  // goal (<5kg gap) → gentler pace to avoid overshoot/muscle loss; otherwise the
+  // standard 0.5kg/week-equivalent pace. Falls back to the standard pace when no
+  // target weight was set (field is optional in onboarding).
+  const weightGapKg = currentWeightKg != null && targetWeightKg != null
+    ? Math.abs(currentWeightKg - targetWeightKg)
+    : undefined
+
   if (goal === 'WEIGHT_LOSS') {
-    calories = Math.max(tdee - 500, noDeficit ? tdee : 1200)
+    const deficit = weightGapKg !== undefined && weightGapKg < 5 ? 250 : 500
+    calories = Math.max(tdee - deficit, noDeficit ? tdee : 1200)
   } else if (goal === 'WEIGHT_GAIN' || goal === 'MUSCLE_GAIN') {
-    calories = tdee + 300
+    const surplus = weightGapKg !== undefined && weightGapKg < 5 ? 150 : 300
+    calories = tdee + surplus
   }
 
-  // CKD: protein restriction — immutable code, not LLM
+  // CKD: protein restriction — immutable code, not LLM. This medical cap always
+  // wins over any lifestyle goal (e.g. muscle gain), so it's checked first and
+  // returns early before the muscle-gain protein bump below.
   const hasCKD = conditions.some(c => c.startsWith('ckd_') || c === 'dialysis')
   if (hasCKD) {
     const proteinG = conditions.includes('dialysis')
@@ -108,9 +128,14 @@ export function computeMacroTargets(
     return { calories, proteinG, carbsG, fatG, fiberG: 20 }
   }
 
-  // Standard macro split
-  const proteinG = Math.round((calories * 0.3) / 4)
-  const carbsG = Math.round((calories * 0.4) / 4)
+  // Muscle gain (primary or secondary goal) shifts the split toward protein to
+  // support strength training / preserve lean mass during a recomposition cut.
+  const wantsMuscleGain = goal === 'MUSCLE_GAIN' || secondaryGoals.includes('MUSCLE_GAIN')
+  const proteinPct = wantsMuscleGain ? 0.35 : 0.3
+  const carbPct = wantsMuscleGain ? 0.35 : 0.4
+
+  const proteinG = Math.round((calories * proteinPct) / 4)
+  const carbsG = Math.round((calories * carbPct) / 4)
   const fatG = Math.round((calories * 0.3) / 9)
   const fiberG = Math.round(calories / 100) // ~14g per 1000 kcal
 
@@ -139,28 +164,44 @@ export function computeMicroTargets(
   }
 }
 
+function weatherAdjustment(weather: WeatherContext): { waterMl: number; calorieAdjust: number; weatherAdjustmentNote?: string } {
+  const effectiveTemp = weather.heatIndex ?? weather.tempC
+
+  if (effectiveTemp >= 38 || (weather.tempC >= 35 && weather.humidity > 60)) {
+    return {
+      waterMl: 3500, calorieAdjust: -100,
+      weatherAdjustmentNote: `Hot & humid conditions (${weather.tempC}°C). Hydration target increased. Lighter meals recommended.`,
+    }
+  }
+  if (effectiveTemp >= 32) {
+    return {
+      waterMl: 3000, calorieAdjust: -50,
+      weatherAdjustmentNote: `Warm conditions (${weather.tempC}°C). Slight calorie reduction and higher hydration.`,
+    }
+  }
+  if (weather.tempC <= 10) {
+    return {
+      waterMl: 2000, calorieAdjust: +150,
+      weatherAdjustmentNote: `Cold conditions (${weather.tempC}°C). Slightly higher calorie target for thermogenesis.`,
+    }
+  }
+  return { waterMl: 2500, calorieAdjust: 0 }
+}
+
+// Derives the human-readable weather note straight from the raw reading (tempC/
+// humidity/heatIndex), independent of whether it was persisted anywhere. Any
+// caller holding a raw WeatherContext — even one saved before this note existed
+// in the schema, or one read back without the note ever having been stored —
+// can recover the same framing text meal-generation prompts rely on.
+export function computeWeatherAdjustmentNote(weather: WeatherContext): string | undefined {
+  return weatherAdjustment(weather).weatherAdjustmentNote
+}
+
 export function applyWeatherAdjustment(
   targets: MacroTargets & MicroTargets,
   weather: WeatherContext
 ): DailyTargets {
-  const effectiveTemp = weather.heatIndex ?? weather.tempC
-  let waterMl = 2500
-  let calorieAdjust = 0
-  let weatherAdjustmentNote: string | undefined
-
-  if (effectiveTemp >= 38 || (weather.tempC >= 35 && weather.humidity > 60)) {
-    waterMl = 3500
-    calorieAdjust = -100
-    weatherAdjustmentNote = `Hot & humid conditions (${weather.tempC}°C). Hydration target increased. Lighter meals recommended.`
-  } else if (effectiveTemp >= 32) {
-    waterMl = 3000
-    calorieAdjust = -50
-    weatherAdjustmentNote = `Warm conditions (${weather.tempC}°C). Slight calorie reduction and higher hydration.`
-  } else if (weather.tempC <= 10) {
-    waterMl = 2000
-    calorieAdjust = +150
-    weatherAdjustmentNote = `Cold conditions (${weather.tempC}°C). Slightly higher calorie target for thermogenesis.`
-  }
+  const { waterMl, calorieAdjust, weatherAdjustmentNote } = weatherAdjustment(weather)
 
   return {
     ...targets,

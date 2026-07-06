@@ -5,7 +5,16 @@ import { db } from '@/db/client'
 import { nutritionTargets, profiles, medicalConditions, dailyLogs, deviations } from '@/db/schema'
 import { generateDayPlan } from '@/lib/ai/plan-generator'
 import { getUserPlan, upgradeRequired } from '@/lib/subscription'
+import { computeWeatherAdjustmentNote } from '@/lib/nutrition/engine'
 import { eq, and, gte, desc } from 'drizzle-orm'
+
+// Derives weatherAdjustmentNote fresh from the raw reading rather than trusting
+// it was persisted — covers rows saved before the note was stored in weatherContext.
+function withWeatherNote(ctx: unknown): (Record<string, unknown> & { weatherAdjustmentNote?: string }) | null {
+  if (!ctx || typeof ctx !== 'object') return null
+  const raw = ctx as { tempC: number; humidity: number; heatIndex?: number }
+  return { ...ctx, weatherAdjustmentNote: computeWeatherAdjustmentNote(raw) }
+}
 
 // Fingerprints the inputs that actually shape a generated plan. When a user edits
 // their diet, allergens, cuisine prefs, or medical conditions mid-day, this changes —
@@ -85,7 +94,7 @@ export async function GET(req: NextRequest) {
       dislikedIngredients: profile?.dislikedIngredients ?? [],
       conditionCodes,
       waterMl: target.targetWaterMl ?? 2500,
-      weatherNote: (target.weatherContext as any)?.weatherAdjustmentNote,
+      weatherNote: withWeatherNote(target.weatherContext)?.weatherAdjustmentNote,
     }
     const currentInputHash = computePlanInputHash(planInput)
 
@@ -166,7 +175,7 @@ export async function GET(req: NextRequest) {
         waterMl: existingLog.waterMl ?? 0,
         planGeneratedAt: existingLog.updatedAt,
         dailyLogId: existingLog.id,
-        weatherContext: existingLog.weatherContext ?? target.weatherContext,
+        weatherContext: withWeatherNote(existingLog.weatherContext ?? target.weatherContext),
         cached: true,
       }
 
@@ -274,7 +283,7 @@ export async function GET(req: NextRequest) {
       waterMl: dailyLog?.waterMl ?? 0,
       planGeneratedAt: dailyLog?.updatedAt ?? new Date(),
       dailyLogId: dailyLog?.id,
-      weatherContext: target.weatherContext,
+      weatherContext: withWeatherNote(target.weatherContext),
       cached: false,
     })
   } catch (err) {

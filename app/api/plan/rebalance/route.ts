@@ -3,19 +3,12 @@ import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
 import { dailyLogs, mealLogs, nutritionTargets, profiles, medicalConditions, deviations } from '@/db/schema'
 import { generateRebalancedPlan } from '@/lib/ai/rebalancer'
-import { computeDeviationSeverity, computeRemainingBudget } from '@/lib/nutrition/engine'
+import { computeDeviationSeverity, computeRemainingBudget, computeWeatherAdjustmentNote } from '@/lib/nutrition/engine'
+import { conditionToRestrictions } from '@/lib/nutrition/condition-restrictions'
 import { eq, and, desc } from 'drizzle-orm'
 import type { RebalanceRequest, RebalanceResponse } from '@/types/api'
 
 const MEAL_ORDER = ['BREAKFAST', 'MORNING_SNACK', 'LUNCH', 'EVENING_SNACK', 'DINNER']
-
-function conditionToRestrictions(codes: string[]): string[] {
-  const r: string[] = []
-  if (codes.some(c => c.startsWith('ckd_') || c === 'dialysis')) r.push('Restrict potassium and phosphorus — no bananas, nuts, excessive dairy')
-  if (codes.some(c => c.includes('hypertension'))) r.push('Sodium < 800mg remaining in day')
-  if (codes.some(c => c.includes('diabetes'))) r.push('Prefer low-GI carbohydrates, avoid refined sugars')
-  return r
-}
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -114,9 +107,11 @@ export async function POST(req: NextRequest) {
       allergens: profile?.allergens ?? [],
       dietType: profile?.dietType ?? 'VEG',
       cuisinePrefs: profile?.cuisinePreferences ?? ['Indian'],
+      dislikedIngredients: profile?.dislikedIngredients ?? [],
       remainingMealSlots: remainingSlots,
       conditions: conditionCodes,
       conditionRestrictions: conditionToRestrictions(conditionCodes),
+      weatherNote: target.weatherContext ? computeWeatherAdjustmentNote(target.weatherContext as any) : undefined,
     })
 
     await db.insert(deviations).values({

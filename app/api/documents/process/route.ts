@@ -7,6 +7,8 @@ import { classifyRisk } from '@/lib/nutrition/engine'
 import { extractMedicalDocument } from '@/lib/ai/document-extractor'
 import { eq, and } from 'drizzle-orm'
 import { getUserPlan, FREE_LIMITS, PRO_LIMITS, upgradeRequired } from '@/lib/subscription'
+import { refreshNutritionTargets } from '@/lib/nutrition/refresh-targets'
+import { mapExtractedConditionToCode } from '@/lib/nutrition/condition-mapper'
 
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] as const
 type AllowedType = typeof ALLOWED_TYPES[number]
@@ -104,7 +106,7 @@ export async function POST(req: NextRequest) {
       const existingCodes = new Set(existing.map(c => c.conditionCode))
 
       const toInsert = extracted.conditions
-        .map(label => ({ code: label.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, ''), label }))
+        .map(label => mapExtractedConditionToCode(label))
         .filter(({ code }) => !existingCodes.has(code))
 
       if (toInsert.length > 0) {
@@ -124,6 +126,23 @@ export async function POST(req: NextRequest) {
       })
       const riskLevel = classifyRisk(allConditions.map(c => c.conditionCode))
       await db.update(profiles).set({ riskLevel: riskLevel as any }).where(eq(profiles.userId, session.userId))
+
+      // New conditions extracted from the doc shift macro targets (e.g. CKD → protein cap)
+      if (toInsert.length > 0) {
+        const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, session.userId) })
+        if (profile?.weightKg && profile?.heightCm && profile?.dateOfBirth) {
+          await refreshNutritionTargets(session.userId, {
+            weightKg: profile.weightKg,
+            heightCm: profile.heightCm,
+            dateOfBirth: profile.dateOfBirth,
+            sex: profile.sex ?? 'other',
+            activityLevel: profile.activityLevel ?? 'sedentary',
+            primaryGoal: profile.primaryGoal ?? 'MAINTENANCE',
+            secondaryGoals: profile.secondaryGoals ?? [],
+            targetWeightKg: profile.targetWeightKg,
+          })
+        }
+      }
     }
 
     if (extracted.medications.length > 0) {

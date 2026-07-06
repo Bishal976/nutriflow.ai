@@ -10,49 +10,7 @@ import { fetchWeatherByCity } from '@/lib/weather/client'
 import { encryptFieldNullable } from '@/lib/crypto/field-encryption'
 import { eq, and, gte, desc } from 'drizzle-orm'
 import type { IntakeRequest, IntakeResponse } from '@/types/api'
-
-// Recompute macro/micro targets in-place when demographics or goals change
-// post-onboarding. Reuses existing weather context — no extra HTTP call.
-async function refreshNutritionTargets(userId: string, params: {
-  weightKg: number; heightCm: number; dateOfBirth: Date
-  sex: string; activityLevel: string; primaryGoal: string
-}) {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const existingTarget = await db.query.nutritionTargets.findFirst({
-    where: and(eq(nutritionTargets.userId, userId), gte(nutritionTargets.date, today)),
-    orderBy: [desc(nutritionTargets.createdAt)],
-  })
-  if (!existingTarget) return
-
-  const ageYears = Math.floor((Date.now() - params.dateOfBirth.getTime()) / (365.25 * 24 * 3600 * 1000))
-  const bmr = computeBMR({ weightKg: params.weightKg, heightCm: params.heightCm, ageYears, sex: params.sex as 'male' | 'female' | 'other' })
-  const tdee = computeTDEE(bmr, params.activityLevel as any)
-
-  const conditions = await db.query.medicalConditions.findMany({ where: eq(medicalConditions.userId, userId) })
-  const macros = computeMacroTargets(tdee, params.primaryGoal as any, conditions.map(c => c.conditionCode))
-  const micros = computeMicroTargets(params.sex as any, conditions.map(c => c.conditionCode))
-
-  const weather = existingTarget.weatherContext as any
-  const targets = weather
-    ? applyWeatherAdjustment({ ...macros, ...micros }, weather)
-    : { ...macros, ...micros, waterMl: 2500 }
-
-  await db.update(nutritionTargets).set({
-    targetCalories: targets.calories,
-    targetProteinG: targets.proteinG,
-    targetCarbsG: targets.carbsG,
-    targetFatG: targets.fatG,
-    targetFiberG: targets.fiberG,
-    targetSodiumMg: targets.sodiumMg,
-    targetPotassiumMg: targets.potassiumMg,
-    targetPhosphorusMg: targets.phosphorusMg,
-    targetIronMg: targets.ironMg,
-    targetCalciumMg: targets.calciumMg,
-    targetWaterMl: targets.waterMl,
-    tdeeKcal: tdee,
-    bmrKcal: bmr,
-  }).where(eq(nutritionTargets.id, existingTarget.id))
-}
+import { refreshNutritionTargets } from '@/lib/nutrition/refresh-targets'
 
 export async function POST(req: NextRequest) {
   const session = await getSession()
@@ -86,6 +44,8 @@ export async function POST(req: NextRequest) {
         weightKg: d.weightKg, heightCm: d.heightCm, dateOfBirth: dob,
         sex: d.sex, activityLevel: d.activityLevel,
         primaryGoal: existingProfile?.primaryGoal ?? 'MAINTENANCE',
+        secondaryGoals: existingProfile?.secondaryGoals ?? [],
+        targetWeightKg: existingProfile?.targetWeightKg,
       })
     }
 
@@ -96,7 +56,8 @@ export async function POST(req: NextRequest) {
         secondaryGoals: (d.secondaryGoals ?? []) as string[],
         targetWeightKg: d.targetWeightKg ?? null,
       }).where(eq(profiles.userId, session.userId))
-      // Refresh targets: goal change shifts macro split (deficit/surplus/maintenance)
+      // Refresh targets: goal change shifts macro split (deficit/surplus/maintenance,
+      // muscle-gain protein bump, target-weight-paced deficit)
       if (existingProfile?.weightKg && existingProfile?.heightCm && existingProfile?.dateOfBirth) {
         await refreshNutritionTargets(session.userId, {
           weightKg: existingProfile.weightKg,
@@ -105,6 +66,8 @@ export async function POST(req: NextRequest) {
           sex: existingProfile.sex ?? 'other',
           activityLevel: existingProfile.activityLevel ?? 'sedentary',
           primaryGoal: d.primaryGoal,
+          secondaryGoals: d.secondaryGoals ?? [],
+          targetWeightKg: d.targetWeightKg,
         })
       }
     }
@@ -131,6 +94,19 @@ export async function POST(req: NextRequest) {
       const riskLevel = classifyRisk(d.conditions.map(c => c.conditionCode))
       await db.update(profiles).set({ riskLevel: riskLevel as any })
         .where(eq(profiles.userId, session.userId))
+      // Refresh targets: conditions affect macro split (e.g. diabetes → lower carbs)
+      if (existingProfile?.weightKg && existingProfile?.heightCm && existingProfile?.dateOfBirth) {
+        await refreshNutritionTargets(session.userId, {
+          weightKg: existingProfile.weightKg,
+          heightCm: existingProfile.heightCm,
+          dateOfBirth: existingProfile.dateOfBirth,
+          sex: existingProfile.sex ?? 'other',
+          activityLevel: existingProfile.activityLevel ?? 'sedentary',
+          primaryGoal: existingProfile.primaryGoal ?? 'MAINTENANCE',
+          secondaryGoals: existingProfile.secondaryGoals ?? [],
+          targetWeightKg: existingProfile.targetWeightKg,
+        })
+      }
     }
 
     if (step === 4) {
@@ -165,7 +141,11 @@ export async function POST(req: NextRequest) {
       const conditions = await db.query.medicalConditions.findMany({ where: eq(medicalConditions.userId, session.userId) })
       const conditionCodes = conditions.map(c => c.conditionCode)
 
-      const macros = computeMacroTargets(tdee, (profile.primaryGoal ?? 'MAINTENANCE') as any, conditionCodes)
+      const macros = computeMacroTargets(tdee, (profile.primaryGoal ?? 'MAINTENANCE') as any, conditionCodes, {
+        secondaryGoals: (profile.secondaryGoals ?? []) as any,
+        currentWeightKg: profile.weightKg,
+        targetWeightKg: profile.targetWeightKg ?? undefined,
+      })
       const micros = computeMicroTargets((profile.sex ?? 'other') as any, conditionCodes)
 
       let weather = null

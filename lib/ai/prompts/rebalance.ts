@@ -8,9 +8,11 @@ interface RebalancePromptParams {
   allergens: string[]
   dietType: string
   cuisinePrefs: string[]
+  dislikedIngredients: string[]
   remainingMealSlots: string[]
   conditions: MedicalConditionCode[]
   conditionRestrictions: string[]
+  weatherNote?: string
 }
 
 export function buildRebalanceSystemPrompt(): string {
@@ -41,7 +43,8 @@ CONSTRAINTS:
 - Diet type: ${params.dietType}
 - EXCLUDE allergens: ${params.allergens.length > 0 ? params.allergens.join(', ') : 'none'}
 - Cuisine preferences: ${params.cuisinePrefs.join(', ')}
-- Remaining meal slots: ${params.remainingMealSlots.join(', ')}${conditionText}
+- Avoid ingredients: ${params.dislikedIngredients.length > 0 ? params.dislikedIngredients.join(', ') : 'none'}
+- Remaining meal slots: ${params.remainingMealSlots.join(', ')}${conditionText}${params.weatherNote ? `\n- Weather context: ${params.weatherNote}` : ''}
 
 Return this exact JSON:
 {

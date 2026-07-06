@@ -3,19 +3,12 @@ import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
 import { mealLogs, dailyLogs, nutritionTargets, profiles, medicalConditions, deviations } from '@/db/schema'
 import { getUserPlan, getDailyMealLogCount, FREE_LIMITS, upgradeRequired } from '@/lib/subscription'
-import { computeRemainingBudget, computeDeviationSeverity } from '@/lib/nutrition/engine'
+import { computeRemainingBudget, computeDeviationSeverity, computeWeatherAdjustmentNote } from '@/lib/nutrition/engine'
+import { conditionToRestrictions } from '@/lib/nutrition/condition-restrictions'
 import { generateRebalancedPlan } from '@/lib/ai/rebalancer'
 import { eq, and, gte, desc } from 'drizzle-orm'
 
 const MEAL_ORDER = ['BREAKFAST', 'MORNING_SNACK', 'LUNCH', 'EVENING_SNACK', 'DINNER']
-
-function conditionToRestrictions(codes: string[]): string[] {
-  const r: string[] = []
-  if (codes.some(c => c.startsWith('ckd_') || c === 'dialysis')) r.push('Restrict potassium and phosphorus — no bananas, nuts, excessive dairy')
-  if (codes.some(c => c.includes('hypertension'))) r.push('Sodium < 800mg remaining in day')
-  if (codes.some(c => c.includes('diabetes'))) r.push('Prefer low-GI carbohydrates, avoid refined sugars')
-  return r
-}
 
 export interface ManualFoodItem {
   name: string
@@ -164,9 +157,11 @@ export async function POST(req: NextRequest) {
       allergens: profile?.allergens ?? [],
       dietType: profile?.dietType ?? 'VEG',
       cuisinePrefs: profile?.cuisinePreferences ?? ['Indian'],
+      dislikedIngredients: profile?.dislikedIngredients ?? [],
       remainingMealSlots: remainingSlots,
       conditions: conditionCodes,
       conditionRestrictions: conditionToRestrictions(conditionCodes),
+      weatherNote: target.weatherContext ? computeWeatherAdjustmentNote(target.weatherContext as any) : undefined,
     })
 
     // Update deviation with rebalance results

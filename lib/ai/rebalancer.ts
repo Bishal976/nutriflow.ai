@@ -8,9 +8,9 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!)
 
 interface RebalanceInput {
   remainingBudget: { calories: number; proteinG: number; carbsG: number; fatG: number }
-  allergens: string[]; dietType: string; cuisinePrefs: string[]
+  allergens: string[]; dietType: string; cuisinePrefs: string[]; dislikedIngredients: string[]
   remainingMealSlots: string[]; conditions: MedicalConditionCode[]
-  conditionRestrictions: string[]
+  conditionRestrictions: string[]; weatherNote?: string
 }
 
 export interface RebalancedMeal {
@@ -44,9 +44,11 @@ export async function generateRebalancedPlan(input: RebalanceInput): Promise<Reb
       allergens: input.allergens,
       dietType: input.dietType,
       cuisinePrefs: input.cuisinePrefs,
+      dislikedIngredients: input.dislikedIngredients,
       remainingMealSlots: input.remainingMealSlots,
       conditions: input.conditions,
       conditionRestrictions: input.conditionRestrictions,
+      weatherNote: input.weatherNote,
     })
   )).response.text().trim()
 

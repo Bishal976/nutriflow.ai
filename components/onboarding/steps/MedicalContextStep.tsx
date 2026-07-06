@@ -1,5 +1,6 @@
 'use client'
 import { useState, useRef } from 'react'
+import { CONDITIONS } from '@/lib/nutrition/conditions'
 
 interface Props {
   onSubmit: (data: object) => void
@@ -7,24 +8,6 @@ interface Props {
   loading: boolean
   initialData?: { conditionCodes?: string[] }
 }
-
-const CONDITIONS = [
-  { code: 'type2_diabetes_medicated', label: 'Type 2 Diabetes (on medication)', group: 'Metabolic' },
-  { code: 'type1_diabetes', label: 'Type 1 Diabetes', group: 'Metabolic' },
-  { code: 'hypertension_medicated', label: 'High Blood Pressure (on medication)', group: 'Cardiovascular' },
-  { code: 'hypertension', label: 'High Blood Pressure (diet-managed)', group: 'Cardiovascular' },
-  { code: 'ckd_stage3', label: 'Chronic Kidney Disease Stage 3', group: 'Kidney' },
-  { code: 'ckd_stage4', label: 'Chronic Kidney Disease Stage 4', group: 'Kidney' },
-  { code: 'ckd_stage5', label: 'Chronic Kidney Disease Stage 5', group: 'Kidney' },
-  { code: 'dialysis', label: 'On Dialysis', group: 'Kidney' },
-  { code: 'pregnancy', label: 'Pregnant', group: 'Reproductive' },
-  { code: 'hypothyroid', label: 'Hypothyroidism', group: 'Hormonal' },
-  { code: 'pcos', label: 'PCOS', group: 'Hormonal' },
-  { code: 'celiac', label: 'Coeliac Disease', group: 'Digestive' },
-  { code: 'ibs_severe', label: 'Irritable Bowel Syndrome (severe)', group: 'Digestive' },
-  { code: 'severe_allergy_anaphylaxis', label: 'Severe Allergy (anaphylaxis history)', group: 'Allergy' },
-  { code: 'eating_disorder', label: 'Eating Disorder (history or current)', group: 'Mental Health' },
-]
 
 export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
   const [selected, setSelected] = useState<Set<string>>(() =>
