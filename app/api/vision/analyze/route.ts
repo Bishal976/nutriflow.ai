@@ -82,6 +82,12 @@ export async function POST(req: NextRequest) {
         status: 'FAILED',
         errorMessage: aiErr instanceof Error ? aiErr.message : 'AI analysis failed',
       }).where(eq(visionJobs.id, job.id))
+
+      // Analysis failed, so this stub can never be confirmed by the client —
+      // delete it now instead of leaving an empty, unconfirmed meal log behind.
+      await db.delete(mealLogs).where(eq(mealLogs.id, mealLog.id))
+
+      return NextResponse.json({ jobId: job.id, error: 'Failed to analyze image' }, { status: 502 })
     }
 
     return NextResponse.json({

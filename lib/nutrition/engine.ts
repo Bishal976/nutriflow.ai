@@ -235,8 +235,10 @@ export function computeRemainingBudget(
 }
 
 export function computeAdherenceScore(targets: MacroTargets, actuals: MacroTargets): number {
-  const calScore = 1 - Math.abs(targets.calories - actuals.calories) / targets.calories
-  const proteinScore = 1 - Math.abs(targets.proteinG - actuals.proteinG) / targets.proteinG
-  const score = (calScore * 0.5 + proteinScore * 0.3 + 0.2) * 100
+  const calScore = Math.max(0, 1 - Math.abs(targets.calories - actuals.calories) / targets.calories)
+  const proteinScore = Math.max(0, 1 - Math.abs(targets.proteinG - actuals.proteinG) / targets.proteinG)
+  // Weights sum to 1 (5:3 ratio preserved from calories:protein, no flat bonus) so
+  // zero intake truthfully scores 0, not a padded floor.
+  const score = (calScore * 0.625 + proteinScore * 0.375) * 100
   return Math.max(0, Math.min(100, Math.round(score)))
 }

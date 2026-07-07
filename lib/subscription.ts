@@ -29,7 +29,11 @@ export async function getDailyMealLogCount(userId: string): Promise<number> {
   const result = await db
     .select({ count: sql<number>`cast(count(*) as int)` })
     .from(mealLogs)
-    .where(and(eq(mealLogs.userId, userId), gte(mealLogs.loggedAt, today)))
+    .where(and(
+      eq(mealLogs.userId, userId),
+      eq(mealLogs.userConfirmed, true),
+      gte(mealLogs.loggedAt, today),
+    ))
   return result[0]?.count ?? 0
 }
 

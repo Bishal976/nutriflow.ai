@@ -259,7 +259,7 @@ console.log('\n── computeAdherenceScore ────────────
   // Perfect adherence
   const t = { calories: 2000, proteinG: 150, carbsG: 200, fatG: 60, fiberG: 30 }
   const score = computeAdherenceScore(t, t)
-  // calScore=1, proteinScore=1 → (1*0.5 + 1*0.3 + 0.2)*100 = 100
+  // calScore=1, proteinScore=1 → (1*0.625 + 1*0.375)*100 = 100
   assert('Perfect adherence = 100', score, 100)
 }
 {
@@ -267,17 +267,24 @@ console.log('\n── computeAdherenceScore ────────────
   const t = { calories: 2000, proteinG: 100, carbsG: 200, fatG: 60, fiberG: 30 }
   const a = { calories: 1000, proteinG: 50, carbsG: 200, fatG: 60, fiberG: 30 }
   const score = computeAdherenceScore(t, a)
-  // calScore=(1-1000/2000)=0.5, proteinScore=(1-50/100)=0.5 → (0.5*0.5+0.5*0.3+0.2)*100 = (0.25+0.15+0.2)*100 = 60
-  // NOTE: The +0.2 constant inflates scores — this test documents current behavior
-  assert('50% deviation score (documents +0.2 inflation)', score, 60)
+  // calScore=(1-1000/2000)=0.5, proteinScore=(1-50/100)=0.5 → (0.5*0.625+0.5*0.375)*100 = 50
+  assert('50% deviation score = 50 (no more flat bonus)', score, 50)
 }
 {
-  // Documented bug: even 100% deviation gets 20pts
+  // Zero intake must score 0 — no free points for not eating
   const t = { calories: 2000, proteinG: 100, carbsG: 200, fatG: 60, fiberG: 30 }
   const a = { calories: 0, proteinG: 0, carbsG: 200, fatG: 60, fiberG: 30 }
   const score = computeAdherenceScore(t, a)
-  // calScore=(1-2000/2000)=0, proteinScore=(1-100/100)=0 → (0+0+0.2)*100=20
-  assert('KNOWN BUG: zero intake still scores 20 (hardcoded +0.2)', score, 20)
+  // calScore=0, proteinScore=0 → 0
+  assert('Zero intake scores 0 (inflation bug fixed)', score, 0)
+}
+{
+  // Massive overeating on calories alone shouldn't erase a perfect protein score
+  const t = { calories: 2000, proteinG: 150, carbsG: 200, fatG: 60, fiberG: 30 }
+  const a = { calories: 6000, proteinG: 150, carbsG: 200, fatG: 60, fiberG: 30 }
+  const score = computeAdherenceScore(t, a)
+  // calScore clamped to 0 (would be -1 unclamped), proteinScore=1 → (0*0.625+1*0.375)*100 = 37.5 → 38
+  assert('Overshoot clamps calScore at 0 instead of going negative', score, 38)
 }
 
 // ─── validateRebalancedPlan ───────────────────────────────────────────────────
