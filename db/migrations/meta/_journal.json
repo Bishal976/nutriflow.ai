@@ -85,6 +85,13 @@
       "when": 1783843200000,
       "tag": "0012_drop_is_admin",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1783843200001,
+      "tag": "0013_document_condition_attribution",
+      "breakpoints": true
     }
   ]
 }

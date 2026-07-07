@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { del, get } from '@vercel/blob'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
-import { medicalDocuments, medicalConditions, profiles } from '@/db/schema'
+import { medicalDocuments, medicalConditions, documentConditions, profiles } from '@/db/schema'
 import { classifyRisk } from '@/lib/nutrition/engine'
 import { eq, and } from 'drizzle-orm'
 import { refreshNutritionTargets } from '@/lib/nutrition/refresh-targets'
@@ -44,6 +44,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   })
   if (!doc) return NextResponse.json({ error: 'Document not found' }, { status: 404 })
 
+  // Capture what this document uniquely supports before it (and its
+  // document_conditions rows, via ON DELETE CASCADE) are gone.
+  const attributed = await db.query.documentConditions.findMany({
+    where: eq(documentConditions.documentId, id),
+  })
+  const attributedCodes = attributed.map(r => r.conditionCode)
+
   // Delete from Vercel Blob
   try {
     await del(doc.storageKey)
@@ -54,19 +61,38 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   // Delete the document record
   await db.delete(medicalDocuments).where(eq(medicalDocuments.id, id))
 
-  // Check if user has any remaining documents
+  let conditionsChanged = false
+
+  // Precise cleanup: for each condition this document supported, remove it
+  // only if no other remaining document still backs it, and only if it's
+  // still unconfirmed — a user who separately confirmed a condition (via
+  // onboarding or the profile page) owns that data regardless of what
+  // happens to the document it originally came from.
+  for (const code of attributedCodes) {
+    const stillBacked = await db.query.documentConditions.findFirst({
+      where: and(eq(documentConditions.userId, session.userId), eq(documentConditions.conditionCode, code)),
+    })
+    if (stillBacked) continue
+
+    const deleted = await db.delete(medicalConditions).where(and(
+      eq(medicalConditions.userId, session.userId),
+      eq(medicalConditions.conditionCode, code),
+      eq(medicalConditions.userConfirmed, false),
+    )).returning({ id: medicalConditions.id })
+    if (deleted.length > 0) conditionsChanged = true
+  }
+
+  // Safety net for conditions with no recorded attribution (documents
+  // processed before this feature existed and not yet backfilled) — only
+  // fires once every document is gone, same as the original behavior.
   const remainingDocs = await db.query.medicalDocuments.findMany({
     where: eq(medicalDocuments.userId, session.userId),
   })
-
-  // If no docs remain, delete all unconfirmed (doc-extracted) conditions
-  // If docs remain, preserve them (we can't tell which conditions came from which doc)
-  let conditionsChanged = false
   if (remainingDocs.length === 0) {
-    const deleted = await db.delete(medicalConditions).where(
+    const swept = await db.delete(medicalConditions).where(
       and(eq(medicalConditions.userId, session.userId), eq(medicalConditions.userConfirmed, false))
     ).returning({ id: medicalConditions.id })
-    conditionsChanged = deleted.length > 0
+    if (swept.length > 0) conditionsChanged = true
   }
 
   // Recompute riskLevel from remaining conditions

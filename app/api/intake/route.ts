@@ -8,7 +8,7 @@ import {
 } from '@/lib/nutrition/engine'
 import { fetchWeatherByCity } from '@/lib/weather/client'
 import { encryptFieldNullable } from '@/lib/crypto/field-encryption'
-import { eq, and, desc } from 'drizzle-orm'
+import { eq, and, desc, inArray } from 'drizzle-orm'
 import type { IntakeRequest, IntakeResponse } from '@/types/api'
 import { refreshNutritionTargets } from '@/lib/nutrition/refresh-targets'
 
@@ -135,22 +135,40 @@ export async function POST(req: NextRequest) {
 
     if (step === 3) {
       const d = data as import('@/types/api').MedicalContextPayload
-      // Only delete user-confirmed conditions so doc-extracted ones (userConfirmed=false) are preserved
-      await db.delete(medicalConditions).where(
-        and(eq(medicalConditions.userId, session.userId), eq(medicalConditions.userConfirmed, true))
-      )
-      if (d.conditions.length > 0) {
-        await db.insert(medicalConditions).values(
-          d.conditions.map(c => ({
-            userId: session.userId,
-            conditionCode: c.conditionCode,
+      const submittedCodes = new Set(d.conditions.map(c => c.conditionCode))
+
+      // Remove previously user-confirmed conditions the user unchecked (no
+      // longer in the submitted set). Doc-extracted conditions not in the
+      // submitted set are left untouched — this step only owns confirmed rows.
+      const previouslyConfirmed = await db.query.medicalConditions.findMany({
+        where: and(eq(medicalConditions.userId, session.userId), eq(medicalConditions.userConfirmed, true)),
+      })
+      const toRemove = previouslyConfirmed.filter(c => !submittedCodes.has(c.conditionCode))
+      if (toRemove.length > 0) {
+        await db.delete(medicalConditions).where(inArray(medicalConditions.id, toRemove.map(c => c.id)))
+      }
+
+      // Upsert each submitted condition as confirmed. If a doc-extracted row
+      // with the same code already exists, this upgrades it in place instead
+      // of colliding with the unique constraint on (userId, conditionCode).
+      for (const c of d.conditions) {
+        await db.insert(medicalConditions).values({
+          userId: session.userId,
+          conditionCode: c.conditionCode,
+          conditionLabel: c.conditionLabel,
+          onMedication: c.onMedication,
+          severity: c.severity ?? null,
+          medicationNotes: encryptFieldNullable(null),
+          userConfirmed: true,
+        }).onConflictDoUpdate({
+          target: [medicalConditions.userId, medicalConditions.conditionCode],
+          set: {
             conditionLabel: c.conditionLabel,
             onMedication: c.onMedication,
             severity: c.severity ?? null,
-            medicationNotes: encryptFieldNullable(null),
             userConfirmed: true,
-          }))
-        )
+          },
+        })
       }
       const riskLevel = classifyRisk(d.conditions.map(c => c.conditionCode))
       await db.update(profiles).set({ riskLevel: riskLevel as any })

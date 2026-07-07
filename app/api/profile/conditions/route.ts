@@ -35,12 +35,24 @@ export async function POST(req: NextRequest) {
     ? { code: conditionCode, label: conditionLabel }
     : mapExtractedConditionToCode(conditionLabel)
 
+  // Upsert rather than blind insert: if a doc-extracted row with this code
+  // already exists (userConfirmed=false), this upgrades it in place instead
+  // of colliding with the unique constraint on (userId, conditionCode).
+  // onMedication/medicationNotes are deliberately left untouched here — this
+  // endpoint has no knowledge of medication info a document may have recorded.
   const [condition] = await db.insert(medicalConditions).values({
     userId: session.userId,
     conditionCode: resolvedCode,
     conditionLabel: resolvedLabel,
     severity: severity ?? null,
     userConfirmed: true,
+  }).onConflictDoUpdate({
+    target: [medicalConditions.userId, medicalConditions.conditionCode],
+    set: {
+      conditionLabel: resolvedLabel,
+      severity: severity ?? null,
+      userConfirmed: true,
+    },
   }).returning()
 
   const riskLevel = await syncRiskLevel(session.userId)

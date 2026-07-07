@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { get, del } from '@vercel/blob'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
-import { medicalDocuments, medicalConditions, profiles } from '@/db/schema'
+import { medicalDocuments, medicalConditions, documentConditions, profiles } from '@/db/schema'
 import { classifyRisk } from '@/lib/nutrition/engine'
 import { extractMedicalDocument } from '@/lib/ai/document-extractor'
 import { eq, and } from 'drizzle-orm'
@@ -98,28 +98,33 @@ export async function POST(req: NextRequest) {
       jobStatus: 'COMPLETED',
     }).where(eq(medicalDocuments.id, doc.id))
 
-    // Auto-merge extracted conditions (skip duplicates)
+    // Auto-merge extracted conditions. Dedupe by code first — Gemini can
+    // mention the same condition twice within one report.
     if (extracted.conditions.length > 0) {
-      const existing = await db.query.medicalConditions.findMany({
-        where: eq(medicalConditions.userId, session.userId),
-      })
-      const existingCodes = new Set(existing.map(c => c.conditionCode))
+      const mapped = new Map(extracted.conditions.map(label => {
+        const m = mapExtractedConditionToCode(label)
+        return [m.code, m] as const
+      }))
 
-      const toInsert = extracted.conditions
-        .map(label => mapExtractedConditionToCode(label))
-        .filter(({ code }) => !existingCodes.has(code))
+      // Record which condition(s) this specific document supports — independent
+      // of whether the medicalConditions row below is new or already existed —
+      // so deleting this document later can tell whether a condition is still
+      // backed by another remaining document before removing it.
+      await db.insert(documentConditions).values(
+        [...mapped.keys()].map(code => ({ documentId: doc.id, userId: session.userId, conditionCode: code }))
+      ).onConflictDoNothing()
 
-      if (toInsert.length > 0) {
-        await db.insert(medicalConditions).values(
-          toInsert.map(({ code, label }) => ({
-            userId: session.userId,
-            conditionCode: code,
-            conditionLabel: label,
-            userConfirmed: false,
-          }))
-        )
-        toInsert.forEach(({ code }) => existingCodes.add(code))
-      }
+      // Insert only genuinely new conditions. The unique constraint on
+      // (userId, conditionCode) means this can never create a duplicate row,
+      // and never downgrades an already-confirmed condition back to unconfirmed.
+      const inserted = await db.insert(medicalConditions).values(
+        [...mapped.values()].map(({ code, label }) => ({
+          userId: session.userId,
+          conditionCode: code,
+          conditionLabel: label,
+          userConfirmed: false,
+        }))
+      ).onConflictDoNothing({ target: [medicalConditions.userId, medicalConditions.conditionCode] }).returning()
 
       const allConditions = await db.query.medicalConditions.findMany({
         where: eq(medicalConditions.userId, session.userId),
@@ -128,7 +133,7 @@ export async function POST(req: NextRequest) {
       await db.update(profiles).set({ riskLevel: riskLevel as any }).where(eq(profiles.userId, session.userId))
 
       // New conditions extracted from the doc shift macro targets (e.g. CKD → protein cap)
-      if (toInsert.length > 0) {
+      if (inserted.length > 0) {
         const profile = await db.query.profiles.findFirst({ where: eq(profiles.userId, session.userId) })
         if (profile?.weightKg && profile?.heightCm && profile?.dateOfBirth) {
           await refreshNutritionTargets(session.userId, {

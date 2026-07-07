@@ -68,7 +68,10 @@ export const medicalConditions = pgTable('medical_conditions', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [
   index('medical_conditions_user_idx').on(t.userId),
-  index('medical_conditions_user_code_idx').on(t.userId, t.conditionCode),
+  // Unique, not just indexed: guarantees at most one row per condition per
+  // user at the DB level, so confirming a doc-extracted condition (or adding
+  // it again from the profile page) can never create a duplicate chip.
+  { name: 'medical_conditions_user_code_unique', columns: [t.userId, t.conditionCode], type: 'unique' as const },
 ])
 
 export const medicalDocuments = pgTable('medical_documents', {
@@ -86,6 +89,23 @@ export const medicalDocuments = pgTable('medical_documents', {
   jobStatus: jobStatusEnum('job_status').default('PENDING'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (t) => [index('medical_documents_user_idx').on(t.userId)])
+
+// Tracks which document(s) support which condition code, independent of
+// medicalConditions rows (which are deduped to one-per-code-per-user). A
+// condition can be attributed to multiple documents; deleting one document
+// should only clear a condition if no other remaining document still backs
+// it — see app/api/documents/[id]/route.ts.
+export const documentConditions = pgTable('document_conditions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  documentId: uuid('document_id').references(() => medicalDocuments.id, { onDelete: 'cascade' }).notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+  conditionCode: varchar('condition_code', { length: 100 }).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+}, (t) => [
+  index('document_conditions_document_idx').on(t.documentId),
+  index('document_conditions_user_code_idx').on(t.userId, t.conditionCode),
+  { name: 'document_conditions_document_code_unique', columns: [t.documentId, t.conditionCode], type: 'unique' as const },
+])
 
 export const nutritionTargets = pgTable('nutrition_targets', {
   id: uuid('id').primaryKey().defaultRandom(),
