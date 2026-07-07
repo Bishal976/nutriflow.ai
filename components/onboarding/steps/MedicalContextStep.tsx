@@ -31,6 +31,17 @@ export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, init
 
   const groups = Array.from(new Set(CONDITIONS.map(c => c.group)))
 
+  // Conditions added elsewhere (profile page's free-text "custom condition"
+  // feature, or an unmapped document extraction) have no entry in the
+  // canonical picker below, so they'd otherwise be invisible here — carried
+  // forward silently with no way to see or remove them from this screen.
+  // Derived from live `selected` state (not just initialData) so removing one
+  // updates the list immediately, and it empties out if "none of the above"
+  // is checked.
+  const otherConditions = [...selected]
+    .filter(code => !CONDITIONS.some(c => c.code === code))
+    .map(code => ({ code, label: labelByCode.current.get(code) ?? code }))
+
   function toggle(code: string) {
     setNoConditions(false)
     setSelected(prev => { const n = new Set(prev); n.has(code) ? n.delete(code) : n.add(code); return n })
@@ -59,6 +70,23 @@ export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, init
       <div style={{ background: 'rgba(45,125,125,0.06)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: 'var(--text-muted)', lineHeight: 1.6 }}>
         <strong style={{ color: 'var(--text)' }}>This is context, not diagnosis.</strong> We use this information to set safe nutrient targets and avoid harmful recommendations. Your data is encrypted and never shared.
       </div>
+
+      {otherConditions.length > 0 && (
+        <div>
+          <label className="label" style={{ marginBottom: 8, display: 'block' }}>Already on your profile</label>
+          <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+            Added elsewhere (e.g. your profile page) — not part of the checklist below, but still factored into your targets. Remove here if no longer accurate.
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {otherConditions.map(c => (
+              <div key={c.code} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'rgba(224,90,90,0.08)', border: '1.5px solid rgba(224,90,90,0.3)', fontSize: 13, fontWeight: 600, color: 'var(--error)' }}>
+                {c.label}
+                <button type="button" onClick={() => toggle(c.code)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--error)', padding: 0, lineHeight: 1, fontSize: 14, fontWeight: 700 }}>×</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {groups.map(group => (
         <div key={group}>
