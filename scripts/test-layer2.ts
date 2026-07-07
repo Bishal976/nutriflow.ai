@@ -3,8 +3,6 @@
  * Run: npx tsx scripts/test-layer2.ts
  * Requires dev server at localhost:3000 and DB reachable.
  */
-import { execSync } from 'child_process'
-
 const BASE = 'http://localhost:3000'
 
 let pass = 0, fail = 0, warn = 0
@@ -99,28 +97,15 @@ function expectBodyContains(label: string, body: any, key: string, substr: strin
   else ko(label, `body.${key}="${val}" missing "${substr}"`)
 }
 
-// Promote userId to admin via node/postgres (avoids direct DB dep in this script)
-function promoteAdmin(email: string) {
-  execSync(
-    `node -e "
-const p=require('postgres');
-const s=p(require('fs').readFileSync('.env.local','utf8').match(/DATABASE_URL=(.+)/)[1].trim().replace(/^\\"|\\"$/g,''),{connect_timeout:5});
-s\\\`UPDATE users SET is_admin=true WHERE email='${email}'\\\`.then(()=>process.exit(0)).catch(e=>{console.error(e.message);process.exit(1)});
-"`, { cwd: process.cwd(), stdio: 'inherit' }
-  )
-}
-
 // ─── Test scaffolding ─────────────────────────────────────────────────────────
 
 async function main() {
 
 const TEST_EMAIL = `layer2_${Date.now()}@test.nutriflow`
 const TEST_PW = 'TestPass1234!'
-const ADMIN_EMAIL = `admin_${Date.now()}@test.nutriflow`
 const VICTIM_EMAIL = `victim_${Date.now()}@test.nutriflow`
 
 const jar = new Map<string, string>()       // main test user session
-const adminJar = new Map<string, string>()  // admin session
 const victimJar = new Map<string, string>() // second user session (cross-user tests)
 let dailyLogId: string
 let mealLogId: string
@@ -558,46 +543,6 @@ console.log('\n── 15. Profile & conditions ───────────
   } else {
     note('Skipping DELETE condition: condition not found')
   }
-}
-
-console.log('\n── 16. Admin routes ──────────────────────────────────────')
-{
-  // Sign up admin user and promote
-  const r = await api('POST', '/api/auth/signup', {
-    body: { email: ADMIN_EMAIL, password: TEST_PW },
-    jar: adminJar,
-  })
-  expect('Admin user signup → 201', r.status, 201)
-}
-
-// Promote admin via CLI
-try {
-  promoteAdmin(ADMIN_EMAIL)
-  ok(`Promoted ${ADMIN_EMAIL} to admin`)
-} catch (e: any) {
-  ko('Failed to promote admin user', e.message)
-}
-
-// Re-login as admin to get fresh token with isAdmin=true
-const adminLoginR = await api('POST', '/api/auth/login', {
-  body: { email: ADMIN_EMAIL, password: TEST_PW },
-  jar: adminJar,
-})
-expect('Admin login → 200', adminLoginR.status, 200)
-
-{
-  // Non-admin: /admin should redirect (middleware blocks it)
-  const r = await api('GET', '/admin', { jar })
-  if (r.status >= 300 && r.status < 400) ok('Non-admin /admin → redirect (blocked)')
-  else if (r.status === 403) ok('Non-admin /admin → 403')
-  else note(`Non-admin /admin returned ${r.status} (expected redirect)`)
-}
-{
-  // Admin: /admin/review should be accessible
-  const r = await api('GET', '/admin/review', { jar: adminJar })
-  // It's a Next.js page (RSC), so expect 200 HTML
-  if (r.status === 200) ok('Admin /admin/review → 200')
-  else note(`Admin /admin/review → ${r.status} (may need full HTML render)`)
 }
 
 console.log('\n── 17. Resend-verification ───────────────────────────────')

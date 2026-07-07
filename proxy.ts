@@ -7,7 +7,6 @@ const PUBLIC_PATHS = [
   '/verify-email',
   '/terms', '/privacy',
 ]
-const ADMIN_PATHS = ['/admin']
 const PUBLIC_API_PREFIXES = ['/api/auth', '/api/razorpay/webhook']
 
 export async function proxy(req: NextRequest) {
@@ -43,10 +42,6 @@ export async function proxy(req: NextRequest) {
     const res = NextResponse.redirect(new URL('/login?reason=session_expired', req.url))
     res.cookies.set(clearCookie)
     return res
-  }
-
-  if (ADMIN_PATHS.some(p => pathname.startsWith(p)) && !session.isAdmin) {
-    return NextResponse.redirect(new URL('/dashboard', req.url))
   }
 
   if (!pathname.startsWith('/onboarding') && !pathname.startsWith('/api')) {

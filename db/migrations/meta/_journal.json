@@ -78,6 +78,13 @@
       "when": 1749513600000,
       "tag": "0010_add_secondary_goals",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1783843200000,
+      "tag": "0012_drop_is_admin",
+      "breakpoints": true
     }
   ]
 }

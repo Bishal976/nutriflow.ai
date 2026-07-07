@@ -20,7 +20,6 @@ export const users = pgTable('users', {
   emailVerificationToken: varchar('email_verification_token', { length: 128 }),
   emailVerificationExpiry: timestamp('email_verification_expiry'),
   onboardingComplete: boolean('onboarding_complete').default(false),
-  isAdmin: boolean('is_admin').default(false),
   plan: varchar('plan', { length: 20 }).default('free').notNull(),
   planActivatedAt: timestamp('plan_activated_at'),
   planExpiresAt: timestamp('plan_expires_at'),

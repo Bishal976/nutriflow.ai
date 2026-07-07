@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
     // Reset rate limit on successful login
     attempts.delete(ip)
 
-    const token = await createToken({ userId: user.id, email: user.email, isAdmin: user.isAdmin ?? false })
+    const token = await createToken({ userId: user.id, email: user.email })
     const res = NextResponse.json({ userId: user.id, onboardingComplete: user.onboardingComplete })
     res.cookies.set(sessionCookieOptions(token))
     if (user.onboardingComplete) {

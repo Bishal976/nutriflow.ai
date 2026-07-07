@@ -17,7 +17,6 @@ export const REISSUE_AFTER_SECONDS = 60 * 60            // 1 hour
 export interface SessionPayload {
   userId: string
   email: string
-  isAdmin: boolean
   lastActive?: number    // unix seconds — updated on each re-issue
   sessionStart?: number  // unix seconds — fixed at session creation (for absolute max)
   iat?: number
@@ -78,7 +77,6 @@ export async function buildRefreshedToken(session: SessionPayload): Promise<stri
   return new SignJWT({
     userId: session.userId,
     email: session.email,
-    isAdmin: session.isAdmin,
     lastActive: now,
     sessionStart: session.sessionStart ?? session.iat ?? now,
   })

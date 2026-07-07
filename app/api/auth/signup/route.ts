@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
       console.error('[signup] Verification email error:', err)
     )
 
-    const token = await createToken({ userId: user.id, email: user.email, isAdmin: false })
+    const token = await createToken({ userId: user.id, email: user.email })
     const res = NextResponse.json({ userId: user.id, onboardingComplete: false }, { status: 201 })
     res.cookies.set(sessionCookieOptions(token))
     return res
