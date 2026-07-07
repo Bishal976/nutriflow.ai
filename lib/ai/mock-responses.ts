@@ -86,6 +86,7 @@ export function getMockRebalance(): RebalanceResult {
     compliance_note: null,
     validationPassed: true,
     violations: [],
+    hardViolations: [],
   }
 }
 

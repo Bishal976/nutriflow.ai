@@ -66,15 +66,21 @@ const HIGH_RISK_CONDITIONS = new Set([
   'ckd_stage3', 'type1_diabetes', 'pregnancy', 'severe_allergy_anaphylaxis',
   'liver_cirrhosis', 'heart_failure',
 ])
-const MODERATE_CONDITIONS = new Set([
-  'type2_diabetes_medicated', 'hypertension_medicated', 'hypothyroid',
-  'pcos', 'ibs_severe', 'celiac',
-])
+// Substring keywords rather than exact codes: onboarding's picker, the profile
+// page's "add condition" feature, and document-extraction mapping all need to
+// land on the same risk tier even if their exact code differs (e.g.
+// "hypothyroidism" vs "hypothyroid", "ibs" vs "ibs_severe", diet-managed
+// "hypertension" vs "hypertension_medicated") — an exact-set check silently
+// drops any of those variants to LOW risk instead of flagging them.
+const MODERATE_KEYWORDS = [
+  'diabetes', 'hypertension', 'hypothyroid', 'hyperthyroidism', 'pcos', 'ibs',
+  'celiac', 'high_cholesterol', 'fatty_liver', 'anemia', 'ckd_stage1', 'ckd_stage2',
+]
 
 export function classifyRisk(conditions: MedicalConditionCode[]): RiskLevel {
   if (conditions.some(c => CRITICAL_CONDITIONS.has(c))) return 'CRITICAL'
   if (conditions.some(c => HIGH_RISK_CONDITIONS.has(c))) return 'HIGH'
-  if (conditions.some(c => MODERATE_CONDITIONS.has(c))) return 'MODERATE'
+  if (conditions.some(c => MODERATE_KEYWORDS.some(k => c.includes(k)))) return 'MODERATE'
   return 'LOW'
 }
 
@@ -130,11 +136,16 @@ export function computeMacroTargets(
     calories = tdee + surplus
   }
 
-  // CKD: protein restriction — immutable code, not LLM. This medical cap always
+  // CKD protein restriction — immutable code, not LLM. This medical cap always
   // wins over any lifestyle goal (e.g. muscle gain), so it's checked first and
-  // returns early before the muscle-gain protein bump below.
-  const hasCKD = conditions.some(c => c.startsWith('ckd_') || c === 'dialysis')
-  if (hasCKD) {
+  // returns early before the muscle-gain protein bump below. Only stage 3+ (or
+  // dialysis, or unspecified/unknown stage — err toward caution) restricts
+  // protein; stage 1-2 CKD is not a protein-restriction indication in practice
+  // and over-restricting early risks malnutrition for no clinical benefit.
+  const hasCKDProteinRestriction = conditions.some(c =>
+    c === 'dialysis' || c === 'ckd_unspecified' || /ckd_stage[3-9]/.test(c)
+  )
+  if (hasCKDProteinRestriction) {
     const proteinG = conditions.includes('dialysis')
       ? Math.round((calories * 0.18) / 4)  // dialysis: higher protein 1.2-1.4g/kg
       : Math.min(50, Math.round((calories * 0.08) / 4))  // CKD non-dialysis: restrict
@@ -164,6 +175,9 @@ export function computeMicroTargets(
   const hasHypertension = conditions.some(c => c.includes('hypertension'))
   const hasCKD = conditions.some(c => c.startsWith('ckd_') || c === 'dialysis')
   const isPregnant = conditions.includes('pregnancy')
+  const hasAnemia = conditions.some(c => c.includes('anemia'))
+
+  const baseIronMg = isPregnant ? 27 : sex === 'female' ? 18 : 8
 
   return {
     // Sodium: restrict for hypertension/CKD, standard otherwise
@@ -172,8 +186,8 @@ export function computeMicroTargets(
     potassiumMg: hasCKD ? 2000 : 4700,
     // Phosphorus: restrict for CKD
     phosphorusMg: hasCKD ? 800 : 1250,
-    // Iron: bump for pregnancy
-    ironMg: isPregnant ? 27 : sex === 'female' ? 18 : 8,
+    // Iron: bump for pregnancy or anemia (whichever asks for more)
+    ironMg: hasAnemia ? Math.max(baseIronMg, 27) : baseIronMg,
     // Calcium: bump for pregnancy
     calciumMg: isPregnant ? 1300 : 1000,
   }

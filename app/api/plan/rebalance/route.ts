@@ -114,6 +114,26 @@ export async function POST(req: NextRequest) {
       weatherNote: target.weatherContext ? computeWeatherAdjustmentNote(target.weatherContext as any) : undefined,
     })
 
+    // Hard violations (allergens, diet-type, medical conditions) survived every
+    // retry inside generateRebalancedPlan — don't serve a plan we know is unsafe.
+    // The meal the user just ate is already logged above regardless; only the
+    // suggested remaining meals are withheld.
+    if (result.hardViolations.length > 0) {
+      console.error('[rebalance] Serving no rebalanced meals — hard violations persisted after retries:', result.hardViolations)
+      await db.insert(deviations).values({
+        dailyLogId: body.dailyLogId, mealLogId: body.mealLogId,
+        deltaCalories, deltaProteinG, deltaCarbsG, deltaFatG,
+        rebalancedMeals: [], rebalanceExplanation: null,
+      })
+      return NextResponse.json({
+        success: true,
+        deviation: { deltaCalories, deltaProteinG, deltaCarbsG, deltaFatG, severity: computeDeviationSeverity(deltaCalories) },
+        rebalancedMeals: [],
+        explanation: "Meal logged. We couldn't generate a safe rebalance for your remaining meals right now — your existing plan stays as is.",
+        complianceNote: null,
+      } as RebalanceResponse)
+    }
+
     await db.insert(deviations).values({
       dailyLogId: body.dailyLogId, mealLogId: body.mealLogId,
       deltaCalories, deltaProteinG, deltaCarbsG, deltaFatG,

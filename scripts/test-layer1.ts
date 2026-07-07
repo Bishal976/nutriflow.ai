@@ -11,6 +11,7 @@ import {
   validateRebalancedPlan, sanitizeExplanation,
 } from '@/lib/nutrition/safety-validator'
 import { mapExtractedConditionToCode } from '@/lib/nutrition/condition-mapper'
+import { conditionToRestrictions } from '@/lib/nutrition/condition-restrictions'
 
 let pass = 0, fail = 0
 
@@ -78,6 +79,18 @@ assert('ckd_stage5 → CRITICAL', classifyRisk(['ckd_stage5']), 'CRITICAL')
 assert('dialysis → CRITICAL', classifyRisk(['dialysis']), 'CRITICAL')
 assert('pregnancy → HIGH', classifyRisk(['pregnancy']), 'HIGH')
 assert('Mixed: hypertension+ckd_stage4 → CRITICAL', classifyRisk(['hypertension_medicated', 'ckd_stage4']), 'CRITICAL')
+// Diet-managed hypertension (no "_medicated" suffix) was previously missed
+// entirely by the exact-set check and silently classified LOW
+assert('hypertension (diet-managed, no suffix) → MODERATE', classifyRisk(['hypertension']), 'MODERATE')
+// Conditions added via the profile page's "Add condition" feature — previously
+// its own divergent code list the risk engine never recognized at all
+assert('high_cholesterol → MODERATE', classifyRisk(['high_cholesterol']), 'MODERATE')
+assert('fatty_liver → MODERATE', classifyRisk(['fatty_liver']), 'MODERATE')
+assert('anemia → MODERATE', classifyRisk(['anemia']), 'MODERATE')
+assert('hyperthyroidism → MODERATE', classifyRisk(['hyperthyroidism']), 'MODERATE')
+assert('ckd_stage1 → MODERATE (not HIGH/CRITICAL — early stage)', classifyRisk(['ckd_stage1']), 'MODERATE')
+assert('gerd → LOW (lifestyle/textural, not a risk-tier condition)', classifyRisk(['gerd']), 'LOW')
+assert('lactose_intolerance → LOW (dietary restriction, not a risk-tier condition)', classifyRisk(['lactose_intolerance']), 'LOW')
 
 // ─── computeMacroTargets ──────────────────────────────────────────────────────
 console.log('\n── computeMacroTargets ───────────────────────────────────')
@@ -133,6 +146,19 @@ console.log('\n── computeMacroTargets ────────────�
   // CKD protein cap always wins over muscle-gain goal — medical safety can't be overridden
   const m = computeMacroTargets(2000, 'MUSCLE_GAIN', ['ckd_stage3'])
   assertTrue('CKD cap overrides muscle-gain protein bump', m.proteinG <= 50)
+}
+{
+  // Stage 1-2 CKD is not a protein-restriction indication in practice — only
+  // stage 3+/dialysis/unspecified should trigger the cap
+  const restricted = computeMacroTargets(2000, 'MAINTENANCE', ['ckd_stage3'])
+  const unrestricted = computeMacroTargets(2000, 'MAINTENANCE', ['ckd_stage1'])
+  assertTrue('ckd_stage1 does NOT trigger protein restriction', unrestricted.proteinG > restricted.proteinG)
+  assertTrue('ckd_stage3 DOES trigger protein restriction', restricted.proteinG <= 50)
+}
+{
+  // Unknown/unspecified CKD stage errs toward caution and restricts
+  const m = computeMacroTargets(2000, 'MAINTENANCE', ['ckd_unspecified'])
+  assertTrue('ckd_unspecified triggers protein restriction (errs toward caution)', m.proteinG <= 50)
 }
 {
   // 3kg gap (within the 5kg taper window) → linear taper: 100 + (500-100)*(3/5) = 340 deficit
@@ -202,6 +228,54 @@ console.log('\n── computeMicroTargets ────────────�
 {
   const micro = computeMicroTargets('male', [])
   assert('Male iron 8', micro.ironMg, 8)
+}
+{
+  const micro = computeMicroTargets('male', ['anemia'])
+  assert('Anemia bumps male iron to 27', micro.ironMg, 27)
+}
+{
+  const micro = computeMicroTargets('female', ['anemia'])
+  assert('Anemia does not lower an already-higher target (female pregnancy-level 27)', micro.ironMg, 27)
+}
+
+// ─── conditionToRestrictions (single merged implementation) ──────────────────
+console.log('\n── conditionToRestrictions ───────────────────────────────')
+{
+  // Regression: this used to be two separately-maintained copies, and the one
+  // used by the post-meal-log rebalance path was missing these two entirely —
+  // meaning a pregnant user or someone with an eating-disorder history lost
+  // this safety framing the moment they logged a meal and got rebalanced.
+  const r = conditionToRestrictions(['pregnancy'])
+  assertTrue('pregnancy → no-deficit + folate rule present', r.some(x => x.includes('No calorie deficit') && x.includes('folate')))
+}
+{
+  const r = conditionToRestrictions(['eating_disorder'])
+  assertTrue('eating_disorder → no restriction-language rule present', r.some(x => x.includes('cutting')))
+  assertTrue('eating_disorder → no-deficit rule present', r.some(x => x.includes('No calorie deficit')))
+}
+{
+  const r = conditionToRestrictions(['high_cholesterol'])
+  assertTrue('high_cholesterol → fried/ghee avoidance rule present', r.some(x => x.includes('deep-fried')))
+}
+{
+  const r = conditionToRestrictions(['fatty_liver'])
+  assertTrue('fatty_liver → same low-saturated-fat rule as high_cholesterol', r.some(x => x.includes('deep-fried')))
+}
+{
+  const r = conditionToRestrictions(['lactose_intolerance'])
+  assertTrue('lactose_intolerance → dairy avoidance rule present', r.some(x => x.toLowerCase().includes('dairy')))
+}
+{
+  const r = conditionToRestrictions(['gerd'])
+  assertTrue('gerd → spice/caffeine/meal-timing rule present', r.some(x => x.includes('caffeine')))
+}
+{
+  const r = conditionToRestrictions(['anemia'])
+  assertTrue('anemia → iron-rich food rule present', r.some(x => x.includes('iron')))
+}
+{
+  const r = conditionToRestrictions([])
+  assert('No conditions → no restrictions', r.length, 0)
 }
 
 // ─── applyWeatherAdjustment ───────────────────────────────────────────────────
@@ -315,7 +389,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'LUNCH', items: [{ name: 'Dal rice', quantity: '1 bowl', calories: 400, proteinG: 15, carbsG: 60, fatG: 8 }], totalCalories: 400 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 500, proteinG: 50, carbsG: 80, fatG: 20 }, [], [], 'Stay hydrated today.')
+  const result = validateRebalancedPlan(meals, { calories: 500, proteinG: 50, carbsG: 80, fatG: 20 }, [], 'VEG', [], 'Stay hydrated today.')
   assert('Valid plan passes', result.passed, true)
   assert('No violations', result.violations.length, 0)
 }
@@ -324,7 +398,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'LUNCH', items: [{ name: 'Biryani', quantity: '2 plates', calories: 1000, proteinG: 30, carbsG: 100, fatG: 40 }], totalCalories: 1000 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 800, proteinG: 50, carbsG: 80, fatG: 30 }, [], [], '')
+  const result = validateRebalancedPlan(meals, { calories: 800, proteinG: 50, carbsG: 80, fatG: 30 }, [], 'VEG', [], '')
   assertTrue('Budget exceeded → violation', !result.passed)
   assertTrue('Budget violation message present', result.violations[0].includes('calorie budget'))
 }
@@ -333,7 +407,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'SNACK', items: [{ name: 'Almond shake', quantity: '1 glass', calories: 200, proteinG: 8, carbsG: 20, fatG: 10 }], totalCalories: 200 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 30, fatG: 15 }, ['nuts'], [], '')
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 30, fatG: 15 }, ['nuts'], 'VEG', [], '')
   assertTrue('Allergen (almond/nuts) → violation', !result.passed)
   assertTrue('Allergen violation message', result.violations.some(v => v.includes('Allergen')))
 }
@@ -342,7 +416,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'DINNER', items: [{ name: 'Whole wheat roti', quantity: '2', calories: 200, proteinG: 6, carbsG: 40, fatG: 3 }], totalCalories: 200 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 50, fatG: 15 }, ['gluten'], [], '')
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 50, fatG: 15 }, ['gluten'], 'VEG', [], '')
   assertTrue('Allergen (wheat roti/gluten) → violation', !result.passed)
 }
 {
@@ -350,7 +424,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'LUNCH', items: [{ name: 'Palak paneer', quantity: '1 bowl', calories: 200, proteinG: 10, carbsG: 8, fatG: 12 }], totalCalories: 200 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 20, fatG: 20 }, ['dairy'], [], '')
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 20, fatG: 20 }, ['dairy'], 'VEG', [], '')
   assertTrue('Allergen (paneer/dairy) → violation', !result.passed)
 }
 {
@@ -358,7 +432,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'LUNCH', items: [{ name: 'Dal rice', quantity: '1 bowl', calories: 300, proteinG: 12, carbsG: 50, fatG: 5 }], totalCalories: 300 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 400, proteinG: 20, carbsG: 60, fatG: 15 }, [], [], 'You may have diabetes based on your symptoms.')
+  const result = validateRebalancedPlan(meals, { calories: 400, proteinG: 20, carbsG: 60, fatG: 15 }, [], 'VEG', [], 'You may have diabetes based on your symptoms.')
   assertTrue('Medical diagnostic language → violation', !result.passed)
   assertTrue('Medical violation message present', result.violations.some(v => v.includes('medical language')))
 }
@@ -367,7 +441,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'LUNCH', items: [{ name: 'Aloo pickle', quantity: '2 tsp', calories: 30, proteinG: 0, carbsG: 5, fatG: 1 }], totalCalories: 30 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 100, proteinG: 5, carbsG: 10, fatG: 5 }, [], ['hypertension_medicated'], '')
+  const result = validateRebalancedPlan(meals, { calories: 100, proteinG: 5, carbsG: 10, fatG: 5 }, [], 'VEG', ['hypertension_medicated'], '')
   assertTrue('High-sodium food (pickle) + hypertension → violation', !result.passed)
 }
 {
@@ -375,7 +449,7 @@ console.log('\n── validateRebalancedPlan ───────────�
   const meals = [
     { mealType: 'SNACK', items: [{ name: 'Water', quantity: '1 glass', calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }], totalCalories: 0 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 200, proteinG: 10, carbsG: 20, fatG: 8 }, [], [], '')
+  const result = validateRebalancedPlan(meals, { calories: 200, proteinG: 10, carbsG: 20, fatG: 8 }, [], 'VEG', [], '')
   assertTrue('Zero-calorie meal → violation', !result.passed)
 }
 {
@@ -385,8 +459,83 @@ console.log('\n── validateRebalancedPlan ───────────�
       { name: 'Almond milk', quantity: '1 cup', calories: 600, proteinG: 5, carbsG: 20, fatG: 5 },
     ], totalCalories: 600 },
   ]
-  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 15, carbsG: 30, fatG: 10 }, ['nuts', 'dairy'], [], '')
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 15, carbsG: 30, fatG: 10 }, ['nuts', 'dairy'], 'VEG', [], '')
   assertTrue('Multiple violations: budget + allergens', result.violations.length >= 2)
+}
+{
+  // Diet-type hard block — previously only allergens were pattern-checked here,
+  // so a VEGAN user could silently get paneer/egg with nothing catching it
+  const meals = [
+    { mealType: 'LUNCH', items: [{ name: 'Palak paneer', quantity: '1 bowl', calories: 200, proteinG: 10, carbsG: 8, fatG: 12 }], totalCalories: 200 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 20, fatG: 20 }, [], 'VEGAN', [], '')
+  assertTrue('Paneer for VEGAN diet → hard violation', result.hardViolations.length > 0)
+}
+{
+  // VEG (standard Indian convention) allows dairy — only meat/fish/egg blocked
+  const meals = [
+    { mealType: 'LUNCH', items: [{ name: 'Palak paneer', quantity: '1 bowl', calories: 200, proteinG: 10, carbsG: 8, fatG: 12 }], totalCalories: 200 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 20, fatG: 20 }, [], 'VEG', [], '')
+  assertTrue('Paneer for VEG diet → no violation (dairy allowed)', result.hardViolations.length === 0)
+}
+{
+  const meals = [
+    { mealType: 'DINNER', items: [{ name: 'Chicken curry', quantity: '1 bowl', calories: 300, proteinG: 25, carbsG: 8, fatG: 15 }], totalCalories: 300 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 400, proteinG: 30, carbsG: 20, fatG: 20 }, [], 'VEG', [], '')
+  assertTrue('Chicken for VEG diet → hard violation', result.hardViolations.length > 0)
+}
+{
+  // Pescatarian allows fish, blocks meat
+  const meals = [
+    { mealType: 'DINNER', items: [{ name: 'Grilled fish', quantity: '1 fillet', calories: 250, proteinG: 30, carbsG: 0, fatG: 10 }], totalCalories: 250 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 400, proteinG: 30, carbsG: 20, fatG: 20 }, [], 'PESCATARIAN', [], '')
+  assertTrue('Fish for PESCATARIAN diet → no violation', result.hardViolations.length === 0)
+}
+{
+  // JAIN blocks root vegetables in addition to meat/fish/egg
+  const meals = [
+    { mealType: 'LUNCH', items: [{ name: 'Onion garlic curry', quantity: '1 bowl', calories: 150, proteinG: 4, carbsG: 20, fatG: 6 }], totalCalories: 150 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 20, fatG: 20 }, [], 'JAIN', [], '')
+  assertTrue('Onion/garlic for JAIN diet → hard violation', result.hardViolations.length > 0)
+}
+{
+  // Lactose intolerance is a physical intolerance — hard block, not a soft preference
+  const meals = [
+    { mealType: 'BREAKFAST', items: [{ name: 'Paneer bhurji', quantity: '1 bowl', calories: 220, proteinG: 15, carbsG: 5, fatG: 15 }], totalCalories: 220 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 20, carbsG: 20, fatG: 20 }, [], 'VEG', ['lactose_intolerance'], '')
+  assertTrue('Paneer for lactose-intolerant user → hard violation', result.hardViolations.length > 0)
+}
+{
+  // High cholesterol / fatty liver hard-blocks fried/organ-meat/ghee-heavy foods
+  const meals = [
+    { mealType: 'DINNER', items: [{ name: 'Deep-fried pakora', quantity: '6 pieces', calories: 350, proteinG: 8, carbsG: 30, fatG: 22 }], totalCalories: 350 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 400, proteinG: 20, carbsG: 40, fatG: 15 }, [], 'VEG', ['high_cholesterol'], '')
+  assertTrue('Deep-fried food for high-cholesterol user → hard violation', result.hardViolations.length > 0)
+}
+{
+  // Sesame is offered as an allergen option in the onboarding picker — was the
+  // only one of the 7 offered allergens with no hard-block pattern at all
+  const meals = [
+    { mealType: 'BREAKFAST', items: [{ name: 'Til laddu', quantity: '2 pieces', calories: 180, proteinG: 4, carbsG: 20, fatG: 9 }], totalCalories: 180 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 300, proteinG: 15, carbsG: 30, fatG: 12 }, ['sesame'], 'VEG', [], '')
+  assertTrue('Sesame (til) allergen → hard violation', result.hardViolations.length > 0)
+}
+{
+  // Soft violations (mild calorie overage) must NOT count as hard — retrying
+  // generation over a 5% budget overage would be wasteful, not safety-critical
+  const meals = [
+    { mealType: 'LUNCH', items: [{ name: 'Dal rice', quantity: '1 bowl', calories: 850, proteinG: 15, carbsG: 60, fatG: 8 }], totalCalories: 850 },
+  ]
+  const result = validateRebalancedPlan(meals, { calories: 800, proteinG: 50, carbsG: 80, fatG: 30 }, [], 'VEG', [], '')
+  assertTrue('Budget-only overage is a violation...', !result.passed)
+  assertTrue('...but NOT a hard violation (not retry-worthy)', result.hardViolations.length === 0)
 }
 
 // ─── sanitizeExplanation ─────────────────────────────────────────────────────
@@ -422,7 +571,10 @@ console.log('\n── mapExtractedConditionToCode (doc-extraction → canonical 
   assertTrue('Mapped CKD code is classified CRITICAL by the risk engine', classifyRisk([ckdCode]) === 'CRITICAL')
   const diabetesCode = mapExtractedConditionToCode('Type 2 Diabetes').code
   assertTrue('Mapped diabetes code is classified MODERATE by the risk engine', classifyRisk([diabetesCode]) === 'MODERATE')
-  const naiveSlug = 'type_2_diabetes' // what the old naive slugify produced — must NOT match
+  // classifyRisk now uses substring keywords (e.g. "diabetes", "hypothyroid") so several
+  // naive slugs get caught anyway as a bonus — but a full-phrase slug like this CKD
+  // example still misses the "ckd_" prefix entirely, so the mapper still matters.
+  const naiveSlug = 'chronic_kidney_disease_stage_4' // what a naive slugify produces — must NOT match
   assertTrue('Naive slugify of the same label would have been LOW risk (the bug this replaces)', classifyRisk([naiveSlug]) === 'LOW')
 }
 

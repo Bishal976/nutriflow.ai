@@ -4,28 +4,17 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import LogoutButton from '@/components/dashboard/LogoutButton'
 import { useToast } from '@/components/ui/Toast'
+import { CONDITIONS } from '@/lib/nutrition/conditions'
 
 const DIET_LABELS: Record<string, string> = {
   VEG: 'Vegetarian', VEGAN: 'Vegan', EGGETARIAN: 'Eggetarian',
   NON_VEG: 'Non-vegetarian', JAIN: 'Jain', PESCATARIAN: 'Pescatarian',
 }
-const COMMON_CONDITIONS = [
-  { code: 'type2_diabetes', label: 'Type 2 Diabetes' },
-  { code: 'hypertension', label: 'Hypertension' },
-  { code: 'hypothyroidism', label: 'Hypothyroidism' },
-  { code: 'hyperthyroidism', label: 'Hyperthyroidism' },
-  { code: 'pcos', label: 'PCOS / PCOD' },
-  { code: 'ckd_stage1', label: 'Kidney Disease (CKD Stage 1-2)' },
-  { code: 'ckd_stage3', label: 'Kidney Disease (CKD Stage 3+)' },
-  { code: 'dialysis', label: 'On Dialysis' },
-  { code: 'anemia', label: 'Anemia' },
-  { code: 'ibs', label: 'IBS (Irritable Bowel Syndrome)' },
-  { code: 'celiac', label: 'Celiac / Gluten Intolerance' },
-  { code: 'lactose_intolerance', label: 'Lactose Intolerance' },
-  { code: 'gerd', label: 'GERD / Acid Reflux' },
-  { code: 'high_cholesterol', label: 'High Cholesterol' },
-  { code: 'fatty_liver', label: 'Fatty Liver (NAFLD)' },
-]
+// Same canonical list the onboarding picker uses (lib/nutrition/conditions.ts) —
+// this used to be its own divergent list of codes (e.g. "hypothyroidism",
+// "ibs", "type2_diabetes") that the risk engine and diet restrictions never
+// recognized, so adding a condition here had zero effect on anything.
+const COMMON_CONDITIONS = CONDITIONS
 
 const ONBOARDING_STEPS = [
   { step: 1, icon: '📏', label: 'Body & measurements', subtitle: 'Height, weight, age, activity' },

@@ -544,6 +544,34 @@ console.log('\n── 15. Profile & conditions ───────────
     note('Skipping DELETE condition: condition not found')
   }
 }
+{
+  // Canonical picker path: high_cholesterol must actually raise riskLevel —
+  // this used to be a dead code the risk engine never recognized
+  const r = await api('POST', '/api/profile/conditions', {
+    jar, body: { conditionCode: 'high_cholesterol', conditionLabel: 'High Cholesterol' },
+  })
+  if (r.status === 200 || r.status === 201) {
+    ok('POST /profile/conditions high_cholesterol → 200/201')
+    if (r.body?.riskLevel === 'MODERATE') ok('high_cholesterol raises riskLevel to MODERATE')
+    else ko('high_cholesterol did not raise riskLevel', JSON.stringify(r.body?.riskLevel))
+  } else {
+    ko('POST /profile/conditions high_cholesterol failed', `${r.status}: ${JSON.stringify(r.body)}`)
+  }
+}
+{
+  // "Add custom condition" path: client sends a naive-slugified code that
+  // isn't in the canonical list — server should map it via the same
+  // condition-mapper document extraction uses, not store the raw slug verbatim
+  const r = await api('POST', '/api/profile/conditions', {
+    jar, body: { conditionCode: 'hypothyroidism_custom_slug', conditionLabel: 'Hypothyroidism' },
+  })
+  if (r.status === 200 || r.status === 201) {
+    if (r.body?.condition?.conditionCode === 'hypothyroid') ok('Custom-add "Hypothyroidism" mapped to canonical code hypothyroid')
+    else ko('Custom-add condition not mapped to canonical code', JSON.stringify(r.body?.condition))
+  } else {
+    ko('POST /profile/conditions custom-add failed', `${r.status}: ${JSON.stringify(r.body)}`)
+  }
+}
 
 console.log('\n── 17. Resend-verification ───────────────────────────────')
 {
