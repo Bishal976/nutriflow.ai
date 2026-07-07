@@ -255,7 +255,10 @@ export default function DocUploadStep({ onSubmit, loading, onSkip, onSaveOnly, e
 }
 
 function UploadCard({ item, onRemove }: { item: UploadItem; onRemove: () => void }) {
-  const [expanded, setExpanded] = useState(false)
+  // Auto-expand when a condition was detected — that's the safety-relevant
+  // case (it already adjusted calorie/macro targets) and shouldn't be hidden
+  // behind a toggle the user has no reason to know to click.
+  const [expanded, setExpanded] = useState(() => !!item.extracted && item.extracted.conditions.length > 0)
   const { fileName, state, extracted, errorMsg } = item
 
   if (state === 'uploading') {
@@ -339,7 +342,13 @@ function UploadCard({ item, onRemove }: { item: UploadItem; onRemove: () => void
               </div>
             </div>
           )}
-          <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Added to your medical profile. Review in Settings.</p>
+          {extracted.conditions.length > 0 ? (
+            <p style={{ fontSize: 12, color: 'var(--primary)', fontWeight: 500 }}>
+              ⚡ Your calorie and macro targets have already been adjusted for the condition(s) above. Review them in Settings — remove anything that isn't correct.
+            </p>
+          ) : (
+            <p style={{ fontSize: 12, color: 'var(--text-muted)' }}>Added to your medical profile. Review in Settings.</p>
+          )}
         </div>
       )}
     </div>

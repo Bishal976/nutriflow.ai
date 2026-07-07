@@ -296,8 +296,12 @@ export default function ProfilePage() {
           {conditions.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 12 }}>
               {conditions.map(c => (
-                <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'rgba(224,90,90,0.08)', border: '1.5px solid rgba(224,90,90,0.3)', fontSize: 13, fontWeight: 600, color: 'var(--error)', opacity: removingIds.has(c.id) ? 0.5 : 1 }}>
+                <div key={c.id} title={c.userConfirmed === false ? 'Detected from an uploaded document — not yet confirmed by you. Already factored into your targets; remove it here if it\'s wrong.' : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20, background: 'rgba(224,90,90,0.08)', border: '1.5px solid rgba(224,90,90,0.3)', fontSize: 13, fontWeight: 600, color: 'var(--error)', opacity: removingIds.has(c.id) ? 0.5 : 1 }}>
                   {c.conditionLabel}
+                  {c.userConfirmed === false && (
+                    <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)', background: 'var(--surface-2)', borderRadius: 8, padding: '1px 6px' }}>📄 from document</span>
+                  )}
                   <button
                     onClick={() => removeCondition(c.id)}
                     disabled={removingIds.has(c.id)}

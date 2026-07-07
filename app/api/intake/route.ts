@@ -12,12 +12,73 @@ import { eq, and, desc } from 'drizzle-orm'
 import type { IntakeRequest, IntakeResponse } from '@/types/api'
 import { refreshNutritionTargets } from '@/lib/nutrition/refresh-targets'
 
+// Every downstream calculation (BMR/TDEE, macro targets, diet restrictions)
+// trusts these fields are real answers, not gaps papered over by a `??`
+// fallback. The client already enforces these via `required` form fields, but
+// that's not a guarantee — a direct API call, a future UI variant, or a
+// client bug could submit a hole here, and without this check the server
+// would silently substitute an assumption (e.g. "sedentary", "VEG") that's
+// indistinguishable from a real answer once it reaches the dashboard.
+const VALID_SEX = ['male', 'female', 'other']
+const VALID_ACTIVITY_LEVELS = ['sedentary', 'lightly_active', 'moderately_active', 'very_active', 'extra_active']
+const VALID_GOALS = ['WEIGHT_LOSS', 'WEIGHT_GAIN', 'MAINTENANCE', 'MUSCLE_GAIN', 'CONDITION_MANAGEMENT']
+const VALID_DIET_TYPES = ['VEG', 'NON_VEG', 'VEGAN', 'JAIN', 'EGGETARIAN', 'PESCATARIAN']
+
+function isFiniteNumberInRange(v: unknown, min: number, max: number): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max
+}
+function isNonEmptyString(v: unknown): v is string {
+  return typeof v === 'string' && v.trim().length > 0
+}
+
+function validateStepData(step: number, data: unknown): string | null {
+  if (step === 1) {
+    const d = data as Partial<import('@/types/api').DemographicsPayload>
+    if (!isNonEmptyString(d.firstName)) return 'firstName is required'
+    if (!isNonEmptyString(d.lastName)) return 'lastName is required'
+    if (!isNonEmptyString(d.dateOfBirth) || isNaN(new Date(d.dateOfBirth).getTime())) return 'A valid dateOfBirth is required'
+    if (!d.sex || !VALID_SEX.includes(d.sex)) return `sex must be one of: ${VALID_SEX.join(', ')}`
+    if (!isFiniteNumberInRange(d.heightCm, 50, 300)) return 'heightCm must be a number between 50 and 300'
+    if (!isFiniteNumberInRange(d.weightKg, 20, 400)) return 'weightKg must be a number between 20 and 400'
+    if (!d.activityLevel || !VALID_ACTIVITY_LEVELS.includes(d.activityLevel)) return `activityLevel must be one of: ${VALID_ACTIVITY_LEVELS.join(', ')}`
+  }
+  if (step === 2) {
+    const d = data as Partial<import('@/types/api').GoalsPayload>
+    if (!d.primaryGoal || !VALID_GOALS.includes(d.primaryGoal)) return `primaryGoal must be one of: ${VALID_GOALS.join(', ')}`
+    if (d.secondaryGoals && d.secondaryGoals.some(g => !VALID_GOALS.includes(g))) return `secondaryGoals must each be one of: ${VALID_GOALS.join(', ')}`
+    if (d.targetWeightKg != null && !isFiniteNumberInRange(d.targetWeightKg, 20, 400)) return 'targetWeightKg must be a number between 20 and 400'
+  }
+  if (step === 3) {
+    const d = data as Partial<import('@/types/api').MedicalContextPayload>
+    if (!Array.isArray(d.conditions)) return 'conditions must be an array'
+    if (d.conditions.some(c => !isNonEmptyString(c.conditionCode) || !isNonEmptyString(c.conditionLabel))) {
+      return 'Every condition needs a conditionCode and conditionLabel'
+    }
+  }
+  if (step === 5) {
+    const d = data as Partial<import('@/types/api').DietaryPrefsPayload>
+    if (!d.dietType || !VALID_DIET_TYPES.includes(d.dietType)) return `dietType must be one of: ${VALID_DIET_TYPES.join(', ')}`
+    if (d.allergens && !Array.isArray(d.allergens)) return 'allergens must be an array'
+    if (d.cuisinePreferences && !Array.isArray(d.cuisinePreferences)) return 'cuisinePreferences must be an array'
+    if (d.dislikedIngredients && !Array.isArray(d.dislikedIngredients)) return 'dislikedIngredients must be an array'
+  }
+  if (step === 6) {
+    const d = data as Partial<import('@/types/api').LocationPayload>
+    if (!isNonEmptyString(d.city)) return 'city is required'
+    if (!isNonEmptyString(d.country)) return 'country is required'
+  }
+  return null
+}
+
 export async function POST(req: NextRequest) {
   const session = await getSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body: IntakeRequest = await req.json()
   const { step, data } = body
+
+  const validationError = validateStepData(step, data)
+  if (validationError) return NextResponse.json({ error: validationError }, { status: 400 })
 
   try {
     // Upsert profile row on every step
