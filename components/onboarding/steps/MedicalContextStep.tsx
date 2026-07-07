@@ -6,19 +6,28 @@ interface Props {
   onSubmit: (data: object) => void
   onSaveOnly?: (data: object) => void
   loading: boolean
-  initialData?: { conditionCodes?: string[] }
+  initialData?: { conditions?: { code: string; label: string }[] }
 }
 
 export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
+  const initialConditions = initialData?.conditions ?? []
   const [selected, setSelected] = useState<Set<string>>(() =>
-    new Set(initialData?.conditionCodes ?? [])
+    new Set(initialConditions.map(c => c.code))
   )
   const [noConditions, setNoConditions] = useState(() =>
-    initialData?.conditionCodes !== undefined && initialData.conditionCodes.length === 0
+    initialData?.conditions !== undefined && initialConditions.length === 0
   )
-  const initialSelected = useRef([...(initialData?.conditionCodes ?? [])].sort().join(','))
-  const initialNoConditions = useRef(initialData?.conditionCodes !== undefined && initialData.conditionCodes.length === 0)
+  const initialSelected = useRef(initialConditions.map(c => c.code).sort().join(','))
+  const initialNoConditions = useRef(initialData?.conditions !== undefined && initialConditions.length === 0)
   const isDirty = [...selected].sort().join(',') !== initialSelected.current || noConditions !== initialNoConditions.current
+
+  // A condition can come from the picker (canonical, has a CONDITIONS entry)
+  // or from the profile page's free-text "custom condition" feature / a
+  // document extraction that didn't map onto a canonical code — those have no
+  // CONDITIONS entry at all. Keep their original label so re-submitting this
+  // step unchanged doesn't crash trying to look up a label that doesn't exist,
+  // and doesn't silently drop or rename what the user actually typed.
+  const labelByCode = useRef(new Map(initialConditions.map(c => [c.code, c.label])))
 
   const groups = Array.from(new Set(CONDITIONS.map(c => c.group)))
 
@@ -32,7 +41,7 @@ export default function MedicalContextStep({ onSubmit, onSaveOnly, loading, init
     return {
       conditions: Array.from(selected).map(code => ({
         conditionCode: code,
-        conditionLabel: CONDITIONS.find(c => c.code === code)!.label,
+        conditionLabel: CONDITIONS.find(c => c.code === code)?.label ?? labelByCode.current.get(code) ?? code,
         onMedication: code.includes('_medicated'),
       }))
     }

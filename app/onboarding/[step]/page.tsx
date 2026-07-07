@@ -55,10 +55,15 @@ function OnboardingStepInner({ step }: { step: number }) {
       targetWeightKg: p.targetWeightKg,
     }
     if (step === 3) {
-      const userCodes = (profileData.conditions ?? [])
+      // Pass the label along with the code, not just the code — a condition
+      // added via the profile page's free-text "custom condition" feature
+      // (or extracted from a document) has no entry in the canonical picker
+      // list, so MedicalContextStep can't re-derive its label from a code
+      // alone without either crashing or guessing.
+      const userConditions = (profileData.conditions ?? [])
         .filter((c: any) => c.userConfirmed)
-        .map((c: any) => c.conditionCode)
-      return { conditionCodes: userCodes }
+        .map((c: any) => ({ code: c.conditionCode, label: c.conditionLabel }))
+      return { conditions: userConditions }
     }
     if (step === 5) return {
       dietType: p.dietType, allergens: p.allergens, cuisinePreferences: p.cuisinePreferences,
