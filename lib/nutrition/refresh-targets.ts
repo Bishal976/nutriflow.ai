@@ -3,18 +3,24 @@ import { nutritionTargets, medicalConditions } from '@/db/schema'
 import {
   computeBMR, computeTDEE, computeMacroTargets, computeMicroTargets, applyWeatherAdjustment,
 } from '@/lib/nutrition/engine'
-import { eq, and, gte, desc } from 'drizzle-orm'
+import { eq, desc } from 'drizzle-orm'
 
 // Recompute macro/micro targets in-place when demographics, goals, or conditions
 // change post-onboarding. Reuses existing weather context — no extra HTTP call.
+//
+// No cron ever inserts a fresh nutritionTargets row per calendar day — there's
+// exactly one row per user, created once at onboarding and updated in place
+// (same read pattern /api/plan/generate uses: latest row, no date filter).
+// A previous `date >= today` guard here meant this silently no-op'd the moment
+// a calendar day passed since that row was created — always target the latest
+// row instead.
 export async function refreshNutritionTargets(userId: string, params: {
   weightKg: number; heightCm: number; dateOfBirth: Date
   sex: string; activityLevel: string; primaryGoal: string
   secondaryGoals?: string[]; targetWeightKg?: number | null
 }) {
-  const today = new Date(); today.setHours(0, 0, 0, 0)
   const existingTarget = await db.query.nutritionTargets.findFirst({
-    where: and(eq(nutritionTargets.userId, userId), gte(nutritionTargets.date, today)),
+    where: eq(nutritionTargets.userId, userId),
     orderBy: [desc(nutritionTargets.createdAt)],
   })
   if (!existingTarget) return

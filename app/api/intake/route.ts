@@ -8,7 +8,7 @@ import {
 } from '@/lib/nutrition/engine'
 import { fetchWeatherByCity } from '@/lib/weather/client'
 import { encryptFieldNullable } from '@/lib/crypto/field-encryption'
-import { eq, and, gte, desc } from 'drizzle-orm'
+import { eq, and, desc } from 'drizzle-orm'
 import type { IntakeRequest, IntakeResponse } from '@/types/api'
 import { refreshNutritionTargets } from '@/lib/nutrition/refresh-targets'
 
@@ -178,8 +178,12 @@ export async function POST(req: NextRequest) {
         bmrKcal: bmr,
       }
 
+      // No date filter: there's one evolving target row per user (see
+      // lib/nutrition/refresh-targets.ts), not a fresh row per calendar day —
+      // filtering by date here duplicated rows on every edit-mode re-save
+      // that happened after the day it was created.
       const existingTarget = await db.query.nutritionTargets.findFirst({
-        where: and(eq(nutritionTargets.userId, session.userId), gte(nutritionTargets.date, today)),
+        where: eq(nutritionTargets.userId, session.userId),
         orderBy: [desc(nutritionTargets.createdAt)],
       })
 
