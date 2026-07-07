@@ -135,9 +135,25 @@ console.log('\n── computeMacroTargets ────────────�
   assertTrue('CKD cap overrides muscle-gain protein bump', m.proteinG <= 50)
 }
 {
-  // targetWeightKg close to current (<5kg gap) → gentler deficit (250 instead of 500)
+  // 3kg gap (within the 5kg taper window) → linear taper: 100 + (500-100)*(3/5) = 340 deficit
   const m = computeMacroTargets(2000, 'WEIGHT_LOSS', [], { currentWeightKg: 70, targetWeightKg: 67 })
-  assert('Small weight gap → gentler 250 deficit', m.calories, 1750)
+  assert('3kg gap → tapered 340 deficit', m.calories, 1660)
+}
+{
+  // 1kg gap → tapers further down: 100 + 400*(1/5) = 180 deficit
+  const m = computeMacroTargets(2000, 'WEIGHT_LOSS', [], { currentWeightKg: 68, targetWeightKg: 67 })
+  assert('1kg gap → tapered 180 deficit (less than 3kg-gap deficit)', m.calories, 1820)
+}
+{
+  // Already at/past goal (gap <= 0) → no deficit, pure maintenance
+  const m = computeMacroTargets(2000, 'WEIGHT_LOSS', [], { currentWeightKg: 67, targetWeightKg: 67 })
+  assert('At goal weight → maintenance, no deficit', m.calories, 2000)
+}
+{
+  // Direction matters: WEIGHT_LOSS goal but current weight already below the
+  // "target" (misconfigured or already-surpassed goal) → still maintenance, not a surplus
+  const m = computeMacroTargets(2000, 'WEIGHT_LOSS', [], { currentWeightKg: 65, targetWeightKg: 70 })
+  assert('Past weight-loss goal → maintenance, not negative deficit', m.calories, 2000)
 }
 {
   // targetWeightKg far from current (>=5kg gap) → standard 500 deficit, unchanged
@@ -150,9 +166,14 @@ console.log('\n── computeMacroTargets ────────────�
   assert('No target weight → standard 500 deficit', m.calories, 1500)
 }
 {
-  // Small weight gap + WEIGHT_GAIN → gentler surplus (150 instead of 300)
+  // 2kg gap + WEIGHT_GAIN → tapered surplus: 100 + (300-100)*(2/5) = 180
   const m = computeMacroTargets(2000, 'WEIGHT_GAIN', [], { currentWeightKg: 58, targetWeightKg: 60 })
-  assert('Small weight gap → gentler 150 surplus', m.calories, 2150)
+  assert('2kg gap → tapered 180 surplus', m.calories, 2180)
+}
+{
+  // Already at/past weight-gain goal → maintenance, no surplus
+  const m = computeMacroTargets(2000, 'WEIGHT_GAIN', [], { currentWeightKg: 62, targetWeightKg: 60 })
+  assert('Past weight-gain goal → maintenance, no surplus', m.calories, 2000)
 }
 
 // ─── computeMicroTargets ─────────────────────────────────────────────────────

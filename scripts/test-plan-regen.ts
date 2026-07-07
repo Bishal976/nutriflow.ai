@@ -64,7 +64,7 @@ async function main() {
 
   console.log('\n── 1. targetWeightKg pacing ─────────────────────────────')
   {
-    // Small gap (78kg current, 76kg target = 2kg) → gentler 250 deficit
+    // Small gap (78kg current, 76kg target = 2kg) → tapered deficit, less than standard 500
     const r = await completeOnboarding(jar, { weightKg: 78, heightCm: 175, primaryGoal: 'WEIGHT_LOSS', targetWeightKg: 76 })
     const tdee = r.body?.generatedTargets ? undefined : undefined
     const plan = await api('GET', '/api/plan/generate', { jar })
@@ -88,7 +88,7 @@ async function main() {
     // Onboarding-step save itself must NOT touch dailyLogs/plan — only nutritionTargets
     const afterEdit = await api('GET', '/api/plan/generate', { jar })
     const afterCalories = afterEdit.body?.target?.targetCalories
-    assert('Target calories increased after widening the weight gap (250→500 deficit)',
+    assert('Target calories decreased after widening the weight gap (deficit tapers up toward 500)',
       afterCalories < beforeCalories, `before=${beforeCalories} after=${afterCalories}`)
     assert('Dashboard load reports stale plan on the first fetch after the edit',
       afterEdit.body?.stale === true, JSON.stringify(afterEdit.body?.stale))

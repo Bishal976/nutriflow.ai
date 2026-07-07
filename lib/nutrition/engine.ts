@@ -85,6 +85,22 @@ export interface MacroTargetOptions {
   targetWeightKg?: number
 }
 
+// Tapers a deficit/surplus down linearly as the user nears their target weight,
+// rather than a flat rate the whole journey — safer (avoids overshoot) and
+// preserves lean mass once there's less fat mass left to lose/gain into. Holds
+// at `standardDelta` for gaps >= taperKg (going further from goal never needs
+// a bigger push — 500kcal/day is already the safe ceiling regardless of how
+// much total weight is involved), tapers linearly down to `minDelta` as the
+// gap shrinks toward 0, and drops to exactly 0 (maintenance) once the user has
+// reached or passed their goal — continuing to push in that direction no
+// longer makes sense.
+function pacedDelta(gapKg: number | undefined, standardDelta: number, minDelta: number, taperKg = 5): number {
+  if (gapKg === undefined) return standardDelta
+  if (gapKg <= 0) return 0
+  if (gapKg >= taperKg) return standardDelta
+  return Math.round(minDelta + (standardDelta - minDelta) * (gapKg / taperKg))
+}
+
 export function computeMacroTargets(
   tdee: number,
   goal: Goal,
@@ -99,19 +115,18 @@ export function computeMacroTargets(
   const noDeficit = conditions.includes('pregnancy')
     || conditions.some(c => ['eating_disorder', 'anorexia', 'bulimia'].includes(c))
 
-  // Pace the deficit/surplus off the user's own target weight when given: close to
-  // goal (<5kg gap) → gentler pace to avoid overshoot/muscle loss; otherwise the
-  // standard 0.5kg/week-equivalent pace. Falls back to the standard pace when no
-  // target weight was set (field is optional in onboarding).
+  // Signed gap in the direction of travel for this goal (positive = still has
+  // ground to cover). Falls back to the standard pace when no target weight
+  // was set (field is optional in onboarding).
   const weightGapKg = currentWeightKg != null && targetWeightKg != null
-    ? Math.abs(currentWeightKg - targetWeightKg)
+    ? (goal === 'WEIGHT_LOSS' ? currentWeightKg - targetWeightKg : targetWeightKg - currentWeightKg)
     : undefined
 
   if (goal === 'WEIGHT_LOSS') {
-    const deficit = weightGapKg !== undefined && weightGapKg < 5 ? 250 : 500
+    const deficit = pacedDelta(weightGapKg, 500, 100)
     calories = Math.max(tdee - deficit, noDeficit ? tdee : 1200)
   } else if (goal === 'WEIGHT_GAIN' || goal === 'MUSCLE_GAIN') {
-    const surplus = weightGapKg !== undefined && weightGapKg < 5 ? 150 : 300
+    const surplus = pacedDelta(weightGapKg, 300, 100)
     calories = tdee + surplus
   }
 
