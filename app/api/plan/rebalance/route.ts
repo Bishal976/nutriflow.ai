@@ -41,9 +41,17 @@ export async function POST(req: NextRequest) {
     const loggedMeal = await db.query.mealLogs.findFirst({ where: eq(mealLogs.id, body.mealLogId) })
     const currentMealType = loggedMeal?.mealType ?? 'LUNCH'
 
-    // Remaining meal slots after this meal
+    // Remaining meal slots after this meal, excluding any slot that already has a
+    // confirmed log today — otherwise logging an earlier meal (e.g. breakfast) after
+    // a later one (e.g. lunch) redundantly re-suggests the meal already eaten, since
+    // position-in-MEAL_ORDER alone doesn't reflect what's actually been logged.
     const currentIdx = MEAL_ORDER.indexOf(currentMealType)
-    const remainingSlots = MEAL_ORDER.slice(currentIdx + 1)
+    const confirmedLogs = await db.query.mealLogs.findMany({
+      where: and(eq(mealLogs.dailyLogId, body.dailyLogId), eq(mealLogs.userConfirmed, true)),
+    })
+    const loggedMealTypes = new Set<string>(confirmedLogs.map(m => m.mealType))
+    loggedMealTypes.add(currentMealType)
+    const remainingSlots = MEAL_ORDER.slice(currentIdx + 1).filter(slot => !loggedMealTypes.has(slot))
 
     const consumed = {
       calories: dailyLog.actualCalories ?? 0,

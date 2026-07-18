@@ -91,6 +91,13 @@ function OnboardingStepInner({ step }: { step: number }) {
         if (step < 6) router.push(`/onboarding/${step + 1}?from=profile`)
         else router.push('/profile')
       } else if (json.onboardingComplete) {
+        // Kick off plan generation now, in parallel with navigating to the
+        // dashboard, instead of waiting for the dashboard's own on-mount fetch
+        // to be the first thing that triggers it. The AI call takes several
+        // seconds — starting it here shaves that latency off the first thing a
+        // new user sees. Fire-and-forget: the dashboard's own fetch reuses
+        // whichever of the two requests lands first and caches the result.
+        fetch('/api/plan/generate').catch(() => {})
         router.push('/dashboard')
       } else {
         router.push(`/onboarding/${step + 1}`)

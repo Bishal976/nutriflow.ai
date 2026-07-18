@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSession } from '@/lib/auth/session'
 import { db } from '@/db/client'
 import { visionJobs, mealLogs, profiles } from '@/db/schema'
-import { analyzeImage } from '@/lib/ai/vision-analyzer'
+import { analyzeImage, toFriendlyVisionError } from '@/lib/ai/vision-analyzer'
 import { getUserPlan, getDailyMealLogCount, FREE_LIMITS, upgradeRequired } from '@/lib/subscription'
 import { eq } from 'drizzle-orm'
 
@@ -70,6 +70,21 @@ export async function POST(req: NextRequest) {
         region: profile?.city ?? undefined,
       })
 
+      // Gemini can respond successfully with zero items (e.g. a non-food photo)
+      // instead of throwing — treat that the same as a failure. Otherwise the
+      // review page shows "0 items" with Confirm disabled, leaving this stub
+      // permanently unconfirmable and visible on the dashboard forever.
+      if (result.foods.length === 0) {
+        const friendlyMessage = "We couldn't identify any food in that photo. Try a clearer picture with better lighting."
+        await db.update(visionJobs).set({
+          status: 'FAILED',
+          errorMessage: friendlyMessage,
+        }).where(eq(visionJobs.id, job.id))
+        await db.delete(mealLogs).where(eq(mealLogs.id, mealLog.id)).catch(err =>
+          console.error('[vision/analyze] failed to clean up empty-result meal log stub:', err))
+        return NextResponse.json({ jobId: job.id, error: friendlyMessage }, { status: 422 })
+      }
+
       await db.update(visionJobs).set({
         status: 'COMPLETED',
         result: result as any,
@@ -78,16 +93,21 @@ export async function POST(req: NextRequest) {
         completedAt: new Date(),
       }).where(eq(visionJobs.id, job.id))
     } catch (aiErr) {
+      const friendlyMessage = toFriendlyVisionError(aiErr)
+      console.error('[vision/analyze] analysis failed:', aiErr)
       await db.update(visionJobs).set({
         status: 'FAILED',
-        errorMessage: aiErr instanceof Error ? aiErr.message : 'AI analysis failed',
+        errorMessage: friendlyMessage,
       }).where(eq(visionJobs.id, job.id))
 
       // Analysis failed, so this stub can never be confirmed by the client —
       // delete it now instead of leaving an empty, unconfirmed meal log behind.
-      await db.delete(mealLogs).where(eq(mealLogs.id, mealLog.id))
+      // Best-effort: if the delete itself fails, still return a proper error to
+      // the client rather than surfacing an unrelated 500 with no jobId.
+      await db.delete(mealLogs).where(eq(mealLogs.id, mealLog.id)).catch(err =>
+        console.error('[vision/analyze] failed to clean up meal log stub:', err))
 
-      return NextResponse.json({ jobId: job.id, error: 'Failed to analyze image' }, { status: 502 })
+      return NextResponse.json({ jobId: job.id, error: friendlyMessage }, { status: 502 })
     }
 
     return NextResponse.json({

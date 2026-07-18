@@ -6,7 +6,11 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.posthog.com https://api.razorpay.com",
+  // Document upload (DocUploadStep) uses @vercel/blob's client `upload()`, which
+  // sends file bytes directly from the browser to Blob storage — bypassing our
+  // serverless function's payload limit for large files. Without these origins
+  // whitelisted, the browser blocks that request outright.
+  "connect-src 'self' https://*.posthog.com https://api.razorpay.com https://blob.vercel-storage.com https://*.public.blob.vercel-storage.com",
   "frame-src https://api.razorpay.com https://checkout.razorpay.com",
   "object-src 'none'",
   "base-uri 'self'",

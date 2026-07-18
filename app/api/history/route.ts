@@ -41,6 +41,7 @@ export async function GET(req: NextRequest) {
         targetCalories: (l.nutritionTargetId && targetMap.get(l.nutritionTargetId)) ?? null,
       })),
       plan,
+      historyDays: maxDays,
     })
   }
 

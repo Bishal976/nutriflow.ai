@@ -13,7 +13,7 @@ function colorForPct(pct: number | null): string {
   return 'rgba(224,90,90,0.55)'
 }
 
-export default function AdherenceHeatmap({ summary }: { summary: DaySummary[] }) {
+export default function AdherenceHeatmap({ summary, historyDays = 30 }: { summary: DaySummary[]; historyDays?: number }) {
   if (summary.length === 0) return null
 
   const pctByDate = new Map<string, number | null>()
@@ -23,9 +23,14 @@ export default function AdherenceHeatmap({ summary }: { summary: DaySummary[] })
     pctByDate.set(key, pct)
   })
 
-  const times = summary.map(s => new Date(s.date).getTime())
-  const oldest = new Date(Math.min(...times))
-  const newest = new Date(Math.max(...times))
+  // The grid always spans the user's full allowed history window (today back to
+  // historyDays ago), not just the range between their oldest/newest logged day —
+  // otherwise a gap at the start or end (no log yet today, or a skipped day) shrinks
+  // the grid instead of showing an empty cell, and the graph never reaches "today".
+  const newest = new Date()
+  newest.setHours(0, 0, 0, 0)
+  const oldest = new Date(newest)
+  oldest.setDate(oldest.getDate() - (historyDays - 1))
 
   // Align the grid to full weeks (Sunday → Saturday columns), GitHub-style
   const start = new Date(oldest)

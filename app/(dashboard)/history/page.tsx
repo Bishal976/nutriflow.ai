@@ -219,6 +219,7 @@ export default function HistoryPage() {
   const [hasMore, setHasMore] = useState(false)
   const [offset, setOffset] = useState(0)
   const [isMockData, setIsMockData] = useState(false)
+  const [historyDays, setHistoryDays] = useState(30)
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set())
 
   useEffect(() => {
@@ -229,6 +230,7 @@ export default function HistoryPage() {
       setLogs(mock)
       setSummary(mock.map(l => ({ date: l.date, totalCaloriesLogged: l.totalCaloriesLogged, targetCalories: l.targetCalories })))
       setIsMockData(true)
+      setHistoryDays(92)
       setLoading(false)
       return
     }
@@ -243,11 +245,13 @@ export default function HistoryPage() {
         setLogs(mock)
         setSummary(mock.map(l => ({ date: l.date, totalCaloriesLogged: l.totalCaloriesLogged, targetCalories: l.targetCalories })))
         setIsMockData(true)
+        setHistoryDays(92)
       } else {
         setLogs(real)
         setSummary(sumD.summary ?? [])
         setHasMore(d.hasMore ?? false)
         setOffset(real.length)
+        setHistoryDays(sumD.historyDays ?? 30)
       }
     }).catch(() => {}).finally(() => setLoading(false))
   }, [])
@@ -341,7 +345,7 @@ export default function HistoryPage() {
             <WeeklySummary logs={logs} />
             <div className="card" style={{ padding: 20 }}>
               <h2 style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 14 }}>Adherence overview</h2>
-              <AdherenceHeatmap summary={summary} />
+              <AdherenceHeatmap summary={summary} historyDays={historyDays} />
             </div>
           </div>
 

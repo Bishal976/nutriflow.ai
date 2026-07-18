@@ -24,16 +24,24 @@ const CITY_COORDS: Record<string, { lat: number; lon: number }> = {
 }
 
 export default function LocationStep({ onSubmit, onSaveOnly, loading, initialData }: Props) {
-  const [city, setCity] = useState(() => {
+  const initialCity = (() => {
     if (!initialData?.city) return ''
     return CITIES.includes(initialData.city) ? initialData.city : 'Other'
-  })
-  const [customCity, setCustomCity] = useState(() => {
+  })()
+  const initialCustomCity = (() => {
     if (!initialData?.city || CITIES.includes(initialData.city)) return ''
     return initialData.city
-  })
-  const [country, setCountry] = useState(initialData?.country ?? 'India')
-  const [timezone, setTimezone] = useState(initialData?.timezone ?? 'Asia/Kolkata')
+  })()
+  const initialCountry = initialData?.country ?? 'India'
+  const initialTimezone = initialData?.timezone ?? 'Asia/Kolkata'
+
+  const [city, setCity] = useState(initialCity)
+  const [customCity, setCustomCity] = useState(initialCustomCity)
+  const [country, setCountry] = useState(initialCountry)
+  const [timezone, setTimezone] = useState(initialTimezone)
+
+  const isDirty = city !== initialCity || customCity !== initialCustomCity ||
+    country !== initialCountry || timezone !== initialTimezone
 
   function buildData() {
     const finalCity = city === 'Other' ? customCity : city
@@ -90,7 +98,7 @@ export default function LocationStep({ onSubmit, onSaveOnly, loading, initialDat
 
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
         {onSaveOnly && (
-          <button type="button" className="btn-secondary" disabled={!canSubmit || loading}
+          <button type="button" className="btn-secondary" disabled={!canSubmit || loading || !isDirty}
             onClick={() => onSaveOnly(buildData())} style={{ flex: 1 }}>
             {loading ? <><span className="spinner" style={{ width: 12, height: 12, border: '1.5px solid rgba(0,0,0,0.15)', borderTopColor: 'var(--text)', borderRadius: '50%', display: 'inline-block', verticalAlign: 'middle', marginRight: 6 }} />Saving…</> : 'Save & return to profile'}
           </button>

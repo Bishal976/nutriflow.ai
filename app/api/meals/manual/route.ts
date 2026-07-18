@@ -50,11 +50,20 @@ export async function POST(req: NextRequest) {
     type MealType = typeof VALID_MEAL_TYPES[number]
     const mealType: MealType = (VALID_MEAL_TYPES.includes(body.mealType as MealType) ? body.mealType : 'LUNCH') as MealType
 
-    // Compute meal totals — apply rough macro split if macros not provided
-    const totalCal = body.items.reduce((s, i) => s + (i.caloriesEstimate || 0), 0)
-    const totalProtein = body.items.reduce((s, i) => s + (i.proteinG ?? i.caloriesEstimate * 0.075), 0)
-    const totalCarbs = body.items.reduce((s, i) => s + (i.carbsG ?? i.caloriesEstimate * 0.125), 0)
-    const totalFat = body.items.reduce((s, i) => s + (i.fatG ?? i.caloriesEstimate * 0.033), 0)
+    // Apply a rough macro split to any item missing per-item macros (the manual-entry
+    // UI only collects calories) — backfilled onto the stored items themselves, not
+    // just the meal-level totals, so expanding an individual item later shows numbers
+    // instead of blanks.
+    const itemsWithMacros = body.items.map(i => ({
+      ...i,
+      proteinG: Math.round((i.proteinG ?? i.caloriesEstimate * 0.075) * 10) / 10,
+      carbsG: Math.round((i.carbsG ?? i.caloriesEstimate * 0.125) * 10) / 10,
+      fatG: Math.round((i.fatG ?? i.caloriesEstimate * 0.033) * 10) / 10,
+    }))
+    const totalCal = itemsWithMacros.reduce((s, i) => s + (i.caloriesEstimate || 0), 0)
+    const totalProtein = itemsWithMacros.reduce((s, i) => s + i.proteinG, 0)
+    const totalCarbs = itemsWithMacros.reduce((s, i) => s + i.carbsG, 0)
+    const totalFat = itemsWithMacros.reduce((s, i) => s + i.fatG, 0)
 
     // Verify dailyLog belongs to this user
     const dailyLog = await db.query.dailyLogs.findFirst({
@@ -68,7 +77,7 @@ export async function POST(req: NextRequest) {
       dailyLogId: body.dailyLogId,
       mealType,
       sourceType: 'MANUAL',
-      foodItems: body.items as any,
+      foodItems: itemsWithMacros as any,
       estimatedCalories: Math.round(totalCal),
       estimatedProteinG: Math.round(totalProtein * 10) / 10,
       estimatedCarbsG: Math.round(totalCarbs * 10) / 10,
@@ -103,7 +112,11 @@ export async function POST(req: NextRequest) {
     }
 
     const currentIdx = MEAL_ORDER.indexOf(mealType)
-    const remainingSlots = MEAL_ORDER.slice(currentIdx + 1)
+    const confirmedLogs = await db.query.mealLogs.findMany({
+      where: and(eq(mealLogs.dailyLogId, body.dailyLogId), eq(mealLogs.userConfirmed, true)),
+    })
+    const loggedMealTypes = new Set<string>(confirmedLogs.map(m => m.mealType))
+    const remainingSlots = MEAL_ORDER.slice(currentIdx + 1).filter(slot => !loggedMealTypes.has(slot))
 
     const consumed = {
       calories: dailyLog.actualCalories ?? 0,

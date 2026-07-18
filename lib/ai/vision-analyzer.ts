@@ -23,6 +23,19 @@ export interface VisionAnalysisResult {
   overall_confidence: number
 }
 
+// Maps raw provider/parse errors to a message safe to show a user — never leak
+// Gemini's raw error body (quota JSON, stack traces) into the UI.
+export function toFriendlyVisionError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err)
+  if (/429|quota|rate.?limit/i.test(raw)) {
+    return "We're getting a lot of requests right now. Please wait a minute and try again."
+  }
+  if (/network|fetch failed|ECONNRESET|ETIMEDOUT/i.test(raw)) {
+    return 'Network error while analysing your photo. Please try again.'
+  }
+  return "We couldn't analyse that photo. Please try again with a clearer picture."
+}
+
 export async function analyzeImage(params: {
   imageBase64: string
   mediaType: 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif'
